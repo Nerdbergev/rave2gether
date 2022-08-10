@@ -24,6 +24,7 @@ type Queue struct {
 }
 
 type Entry struct {
+	Name    string
 	URL     string
 	Hash    string
 	Addedby user.User
@@ -53,6 +54,7 @@ func (q *Queue) AddEntry(input string, user user.User) {
 	e.Addedby = user
 	if isValidUrl(input) {
 		e.URL = input
+		e.Name = input
 	} else {
 		results, err := ytsearch.Search(input)
 		if err != nil {
@@ -61,6 +63,7 @@ func (q *Queue) AddEntry(input string, user user.User) {
 		}
 
 		e.URL = "https://www.youtube.com/watch?v=" + results[1].VideoId
+		e.Name = results[1].Title
 	}
 	h := sha1.New()
 	h.Write([]byte(e.URL))
@@ -86,7 +89,6 @@ func (q *Queue) PlayNext() error {
 	e := q.Entries[0]
 
 	log.Println("Playing next Song " + e.Hash)
-	q.Entries = q.Entries[1:]
 
 	fp := filepath.Join(q.MusicDir, e.Hash) + ".mp3"
 
@@ -110,6 +112,7 @@ func (q *Queue) PlayNext() error {
 	})))
 
 	<-done
+	q.Entries = q.Entries[1:]
 	return nil
 }
 
