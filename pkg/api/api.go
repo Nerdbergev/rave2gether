@@ -50,7 +50,7 @@ func addtoQueueHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func listQueueHandler(w http.ResponseWriter, r *http.Request) {
-	j, err := json.Marshal(playlist.Entries)
+	j, err := json.MarshalIndent(playlist, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
 		return
