@@ -1,7 +1,7 @@
 package user
 
 type User struct {
-	Username string
-	Password string
-	Salt     string
+	Username string`json:"username"`
+	Password string`json:"-"`
+	Salt     string`json:"-"`
 }
