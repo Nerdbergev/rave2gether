@@ -15,7 +15,7 @@ func main() {
 		log.Fatal("Error loading config:", err)
 	}
 
-	r := api.GetAPIRouter(c.MusicDir)
+	r := api.GetAPIRouter(c.MusicDir, c.YTApiKey)
 
 	go api.DownloadQueue()
 

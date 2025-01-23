@@ -93,9 +93,9 @@ func getHistoryHandler(w http.ResponseWriter, r *http.Request, location string) 
 	w.Write(history)
 }
 
-func GetAPIRouter(location string) *chi.Mux {
+func GetAPIRouter(location string, apiKey string) *chi.Mux {
 	playlist = queue.Queue{MusicDir: location}
-	downloadlist = queue.Queue{MusicDir: location}
+	downloadlist = queue.Queue{MusicDir: location, APIKey: apiKey}
 
 	r := chi.NewRouter()
 

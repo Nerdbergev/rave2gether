@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Port     int
 	MusicDir string
+	YTApiKey string
 }
 
 func LoadConfig(filepath string) (Config, error) {
