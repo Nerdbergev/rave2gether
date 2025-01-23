@@ -18,6 +18,10 @@ import (
 	"github.com/faiface/beep/speaker"
 )
 
+const (
+	HistoryFile = "history.log"
+)
+
 type Queue struct {
 	MusicDir string
 	Entries  []Entry
@@ -47,6 +51,23 @@ func isValidUrl(toTest string) bool {
 	}
 
 	return true
+}
+
+func WriteHistory(name string, folder string) error {
+	f, err := os.Create(filepath.Join(folder, HistoryFile))
+	if err != nil {
+		return errors.New("Error creating history file: " + err.Error())
+	}
+	defer f.Close()
+
+	stamp := time.Now().Format("2006-01-02 15:04:05")
+
+	_, err = f.WriteString(stamp + ":" + name + "\n")
+	if err != nil {
+		return errors.New("Error writing history file: " + err.Error())
+	}
+
+	return nil
 }
 
 func (q *Queue) AddEntry(input string, user user.User) {
@@ -112,6 +133,7 @@ func (q *Queue) PlayNext() error {
 	})))
 
 	<-done
+	WriteHistory(e.Name, q.MusicDir)
 	q.Entries = q.Entries[1:]
 	return nil
 }

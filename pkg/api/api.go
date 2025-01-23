@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -82,6 +84,15 @@ func WorkQueue() {
 	}
 }
 
+func getHistoryHandler(w http.ResponseWriter, r *http.Request, location string) {
+	history, err := os.ReadFile(filepath.Join(location, queue.HistoryFile))
+	if err != nil {
+		apierror(w, r, "Error reading history file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(history)
+}
+
 func GetAPIRouter(location string) *chi.Mux {
 	playlist = queue.Queue{MusicDir: location}
 	downloadlist = queue.Queue{MusicDir: location}
@@ -98,6 +109,11 @@ func GetAPIRouter(location string) *chi.Mux {
 	r.Route("/queue", func(r chi.Router) {
 		r.Get("/", listQueueHandler)
 		r.Post("/", addtoQueueHandler)
+	})
+	r.Route("/history", func(r chi.Router) {
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			getHistoryHandler(w, r, location)
+		})
 	})
 	return r
 }

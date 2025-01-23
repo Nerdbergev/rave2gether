@@ -19,3 +19,4 @@ ytdlp and ffmpeg
 - Up and down vote songs
 - User und Rights Managment
 - Webinterface
+- History of songs
