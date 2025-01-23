@@ -60,6 +60,18 @@ func listQueueHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
+func getSongPositionHanndler(w http.ResponseWriter, r *http.Request) {
+	playlist.SongPosition.Mutex.Lock()
+	posi := playlist.SongPosition
+	playlist.SongPosition.Mutex.Unlock()
+	j, err := json.MarshalIndent(posi, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
 func DownloadQueue() {
 	for {
 		e, err := downloadlist.DownloadNext()
@@ -109,6 +121,7 @@ func GetAPIRouter(location string, apiKey string) *chi.Mux {
 	r.Route("/queue", func(r chi.Router) {
 		r.Get("/", listQueueHandler)
 		r.Post("/", addtoQueueHandler)
+		r.Get("/position", getSongPositionHanndler)
 	})
 	r.Route("/history", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -10,18 +11,22 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/Nerdbergev/rave2gether/pkg/downloader"
 	"github.com/Nerdbergev/rave2gether/pkg/user"
-	"github.com/faiface/beep"
-	"github.com/faiface/beep/mp3"
-	"github.com/faiface/beep/speaker"
+	"github.com/gopxl/beep/v2"
+	"github.com/gopxl/beep/v2/mp3"
+	"github.com/gopxl/beep/v2/speaker"
 )
 
 const (
-	HistoryFile = "history.log"
+	HistoryFile                 = "history.json"
+	sampleRate  beep.SampleRate = 44100
 )
 
 const baseURL = "https://www.googleapis.com/youtube/v3/search"
@@ -37,17 +42,26 @@ type YouTubeResponse struct {
 	} `json:"items"`
 }
 
+type SongPosition struct {
+	Position time.Duration `json:"position"`
+	Length   time.Duration `json:"length"`
+	Mutex    sync.Mutex    `json:"-"`
+}
+
 type Queue struct {
-	APIKey   string
-	MusicDir string
-	Entries  []Entry
+	APIKey       string
+	MusicDir     string
+	Entries      []Entry
+	SongPosition SongPosition
 }
 
 type Entry struct {
-	Name    string
-	URL     string
-	Hash    string
-	Addedby user.User
+	Name     string
+	URL      string
+	Hash     string
+	Addedby  user.User
+	AddedAt  time.Time
+	PlayedAt time.Time
 }
 
 func init() {
@@ -69,16 +83,25 @@ func isValidUrl(toTest string) bool {
 	return true
 }
 
-func WriteHistory(name string, folder string) error {
-	f, err := os.Create(filepath.Join(folder, HistoryFile))
-	if err != nil {
-		return errors.New("Error creating history file: " + err.Error())
+func WriteHistory(e Entry, folder string) error {
+	var history []Entry
+	fp := filepath.Join(folder, HistoryFile)
+	if _, err := os.Stat(fp); err == nil {
+		historyFile, err := os.ReadFile(fp)
+		if err != nil {
+			return errors.New("Error reading history file: " + err.Error())
+		}
+		err = json.Unmarshal(historyFile, &history)
+		if err != nil {
+			return errors.New("Error unmarshalling history file: " + err.Error())
+		}
 	}
-	defer f.Close()
-
-	stamp := time.Now().Format("2006-01-02 15:04:05")
-
-	_, err = f.WriteString(stamp + ":" + name + "\n")
+	history = append(history, e)
+	historyJSON, err := json.MarshalIndent(history, "", "    ")
+	if err != nil {
+		return errors.New("Error marshalling history: " + err.Error())
+	}
+	err = os.WriteFile(fp, historyJSON, 0644)
 	if err != nil {
 		return errors.New("Error writing history file: " + err.Error())
 	}
@@ -132,9 +155,20 @@ func searchYouTube(query string, maxResults int, apiKey string) ([]map[string]st
 func (q *Queue) AddEntry(input string, user user.User) {
 	var e Entry
 	e.Addedby = user
+	e.AddedAt = time.Now()
 	if isValidUrl(input) {
 		e.URL = input
-		e.Name = input
+		cmd := exec.Command("yt-dlp", "--print", "title", input)
+
+		// Capture the output
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		err := cmd.Run()
+		if err != nil {
+			fmt.Printf("Error running yt-dlp: %v\n", err)
+			return
+		}
+		e.Name = strings.TrimSpace(string(out.String()))
 	} else {
 		result, err := searchYouTube(input, 1, q.APIKey)
 		if err != nil {
@@ -149,6 +183,7 @@ func (q *Queue) AddEntry(input string, user user.User) {
 		e.Name = result[0]["title"]
 		e.URL = result[0]["url"]
 	}
+	log.Println("Adding song to queue: " + e.Name + " (" + e.URL + ")")
 	h := sha1.New()
 	h.Write([]byte(e.URL))
 	e.Hash = hex.EncodeToString(h.Sum(nil))
@@ -172,7 +207,7 @@ func (q *Queue) PlayNext() error {
 
 	e := q.Entries[0]
 
-	log.Println("Playing next Song " + e.Hash)
+	log.Println("Playing next Song " + e.Hash + " " + e.Name)
 
 	fp := filepath.Join(q.MusicDir, e.Hash) + ".mp3"
 
@@ -188,17 +223,49 @@ func (q *Queue) PlayNext() error {
 	}
 	defer streamer.Close()
 
-	resampled := beep.Resample(4, format.SampleRate, 44100, streamer)
+	resampled := beep.Resample(4, format.SampleRate, sampleRate, streamer)
 
 	done := make(chan bool)
 	speaker.Play(beep.Seq(resampled, beep.Callback(func() {
 		done <- true
 	})))
 
+	// Start a ticker to display the current position
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				position := sampleRate.D(streamer.Position())
+				length := sampleRate.D(streamer.Len())
+				q.SongPosition.Mutex.Lock()
+				q.SongPosition.Position = position
+				q.SongPosition.Length = length
+				q.SongPosition.Mutex.Unlock()
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	<-done
-	WriteHistory(e.Name, q.MusicDir)
+
+	e.PlayedAt = time.Now()
+	WriteHistory(e, q.MusicDir)
+	log.Println("Song played: " + e.Name)
 	q.Entries = q.Entries[1:]
 	return nil
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	// Return true only if it exists and is not a directory
+	return !info.IsDir()
 }
 
 func (q *Queue) DownloadNext() (Entry, error) {
@@ -214,10 +281,14 @@ func (q *Queue) DownloadNext() (Entry, error) {
 	q.Entries = q.Entries[1:]
 
 	fp := filepath.Join(q.MusicDir, e.Hash) + ".mp3"
-	log.Println("Downloading to " + fp)
-	err := downloader.Download(e.URL, e.Hash, q.MusicDir)
-	if err != nil {
-		return Entry{}, errors.New("Error downloading file: " + err.Error())
+	if !fileExists(fp) {
+		log.Println("Downloading to " + fp)
+		err := downloader.Download(e.URL, e.Hash, q.MusicDir)
+		if err != nil {
+			return Entry{}, errors.New("Error downloading file: " + err.Error())
+		}
+	} else {
+		log.Println("File already exists")
 	}
 	return e, nil
 }
