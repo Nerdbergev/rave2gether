@@ -9,14 +9,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Nerdbergev/rave2gether/pkg/config"
 	"github.com/Nerdbergev/rave2gether/pkg/queue"
 	"github.com/Nerdbergev/rave2gether/pkg/user"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
-var playlist queue.Queue
-var downloadlist queue.Queue
+var playlist queue.PlayQueue
+var downloadlist queue.DownloadQueue
 
 type errorResponse struct {
 	Httpstatus   string `json:"httpstatus"`
@@ -24,7 +25,11 @@ type errorResponse struct {
 }
 
 type addSongRequest struct {
-	Query string `json:"query"`
+	Queries []string `json:"queries"`
+}
+
+type voteRequest struct {
+	Upvote bool `json:"upvote"`
 }
 
 func apierror(w http.ResponseWriter, r *http.Request, err string, httpcode int) {
@@ -47,12 +52,21 @@ func addtoQueueHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := user.User{Username: "Fick Hans"}
-	downloadlist.AddEntry(req.Query, u)
+	for _, q := range req.Queries {
+		if q == "" {
+			continue
+		}
+		err = downloadlist.AddEntry(q, u)
+		if err != nil {
+			apierror(w, r, "Error adding song to queue: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
 func listQueueHandler(w http.ResponseWriter, r *http.Request) {
-	j, err := json.MarshalIndent(playlist, "", "    ")
+	j, err := json.MarshalIndent(playlist.Entries, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -60,7 +74,7 @@ func listQueueHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-func getSongPositionHanndler(w http.ResponseWriter, r *http.Request) {
+func getSongPositionHandler(w http.ResponseWriter, r *http.Request) {
 	playlist.SongPosition.Mutex.Lock()
 	posi := playlist.SongPosition
 	playlist.SongPosition.Mutex.Unlock()
@@ -72,11 +86,47 @@ func getSongPositionHanndler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
+func voteSongHandler(w http.ResponseWriter, r *http.Request) {
+	var req voteRequest
+	log.Println("Voting for Song")
+	songid := chi.URLParam(r, "songid")
+	if songid == "" {
+		apierror(w, r, "No songid provided", http.StatusBadRequest)
+		return
+	}
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = playlist.VoteSong(songid, req.Upvote)
+	if err != nil {
+		apierror(w, r, "Error voting for song: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteSongHandler(w http.ResponseWriter, r *http.Request) {
+	songid := chi.URLParam(r, "songid")
+	if songid == "" {
+		apierror(w, r, "No songid provided", http.StatusBadRequest)
+		return
+	}
+	err := playlist.DeleteSong(songid)
+	if err != nil {
+		apierror(w, r, "Error deleting song: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func DownloadQueue() {
 	for {
 		e, err := downloadlist.DownloadNext()
 		if err != nil {
-			log.Println("Error downloading next song:", err)
+			log.Printf("Error downloading Song: %v ID: %v Error: %v", e.Name, e.ID, err)
 		} else {
 			if e.Hash != "" {
 				playlist.Entries = append(playlist.Entries, e)
@@ -105,9 +155,10 @@ func getHistoryHandler(w http.ResponseWriter, r *http.Request, location string) 
 	w.Write(history)
 }
 
-func GetAPIRouter(location string, apiKey string) *chi.Mux {
-	playlist = queue.Queue{MusicDir: location}
-	downloadlist = queue.Queue{MusicDir: location, APIKey: apiKey}
+func GetAPIRouter(location string, apiKey string, mode config.Operatingmode) *chi.Mux {
+	playlist.Queue.MusicDir = location
+	downloadlist.Queue.MusicDir = location
+	downloadlist.APIKey = apiKey
 
 	r := chi.NewRouter()
 
@@ -117,16 +168,24 @@ func GetAPIRouter(location string, apiKey string) *chi.Mux {
 	r.Use(middleware.Recoverer)
 
 	r.Use(middleware.Timeout(60 * time.Second))
-
-	r.Route("/queue", func(r chi.Router) {
-		r.Get("/", listQueueHandler)
-		r.Post("/", addtoQueueHandler)
-		r.Get("/position", getSongPositionHanndler)
-	})
-	r.Route("/history", func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			getHistoryHandler(w, r, location)
+	r.Route("/api", func(r chi.Router) {
+		r.Route("/queue", func(r chi.Router) {
+			r.Get("/", listQueueHandler)
+			r.Post("/", addtoQueueHandler)
+			r.Get("/position", getSongPositionHandler)
+			r.Route("/{songid}", func(r chi.Router) {
+				if mode == config.Voting || mode == config.UserVoting || mode == config.UserCoins {
+					r.Post("/vote", voteSongHandler)
+				}
+				r.Delete("/", deleteSongHandler)
+			})
+		})
+		r.Route("/history", func(r chi.Router) {
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				getHistoryHandler(w, r, location)
+			})
 		})
 	})
+
 	return r
 }

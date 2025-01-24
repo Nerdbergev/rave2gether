@@ -7,18 +7,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Nerdbergev/rave2gether/pkg/downloader"
 	"github.com/Nerdbergev/rave2gether/pkg/user"
+	"github.com/google/uuid"
 	"github.com/gopxl/beep/v2"
 	"github.com/gopxl/beep/v2/mp3"
 	"github.com/gopxl/beep/v2/speaker"
@@ -49,19 +52,30 @@ type SongPosition struct {
 }
 
 type Queue struct {
-	APIKey       string
-	MusicDir     string
-	Entries      []Entry
+	MusicDir   string
+	EntryMutex sync.Mutex
+	Entries    []Entry
+}
+
+type DownloadQueue struct {
+	APIKey string
+	Queue
+}
+
+type PlayQueue struct {
 	SongPosition SongPosition
+	Queue
 }
 
 type Entry struct {
+	ID       string
 	Name     string
 	URL      string
 	Hash     string
-	Addedby  user.User
+	Addedby  string
 	AddedAt  time.Time
 	PlayedAt time.Time
+	Points   int
 }
 
 func init() {
@@ -110,6 +124,9 @@ func WriteHistory(e Entry, folder string) error {
 }
 
 func searchYouTube(query string, maxResults int, apiKey string) ([]map[string]string, error) {
+	if apiKey == "" {
+		return nil, errors.New("API key not set")
+	}
 	// Prepare the API request
 	params := url.Values{}
 	params.Add("part", "snippet")
@@ -152,9 +169,9 @@ func searchYouTube(query string, maxResults int, apiKey string) ([]map[string]st
 	return results, nil
 }
 
-func (q *Queue) AddEntry(input string, user user.User) {
+func (q *DownloadQueue) AddEntry(input string, user user.User) error {
 	var e Entry
-	e.Addedby = user
+	e.Addedby = user.Username
 	e.AddedAt = time.Now()
 	if isValidUrl(input) {
 		e.URL = input
@@ -166,46 +183,68 @@ func (q *Queue) AddEntry(input string, user user.User) {
 		err := cmd.Run()
 		if err != nil {
 			fmt.Printf("Error running yt-dlp: %v\n", err)
-			return
+			return errors.New("Error running yt-dlp: " + err.Error())
 		}
 		e.Name = strings.TrimSpace(string(out.String()))
 	} else {
 		result, err := searchYouTube(input, 1, q.APIKey)
 		if err != nil {
 			log.Println("Error searching for song: " + err.Error())
-			return
+			return errors.New("Error searching for song: " + err.Error())
 		}
 
 		for i, r := range result {
 			fmt.Println(i, r)
 		}
 
-		e.Name = result[0]["title"]
+		e.Name = html.UnescapeString(result[0]["title"])
 		e.URL = result[0]["url"]
 	}
 	log.Println("Adding song to queue: " + e.Name + " (" + e.URL + ")")
 	h := sha1.New()
 	h.Write([]byte(e.URL))
 	e.Hash = hex.EncodeToString(h.Sum(nil))
+	e.ID = uuid.New().String()
+	log.Println(e)
+	q.EntryMutex.Lock()
 	q.Entries = append(q.Entries, e)
+	q.EntryMutex.Unlock()
+	return nil
 }
 
-func (q *Queue) RemoveEntry(index int) {
-	q.Entries = append(q.Entries[:index], q.Entries[index+1:]...)
+func (q *Queue) PopEntry() Entry {
+	q.EntryMutex.Lock()
+	defer q.EntryMutex.Unlock()
+	e := q.Entries[0]
+	q.Entries = q.Entries[1:]
+	return e
 }
 
 func (q *Queue) GetAllEntries() []Entry {
+	q.EntryMutex.Lock()
+	defer q.EntryMutex.Unlock()
 	return q.Entries
 }
 
-func (q *Queue) PlayNext() error {
+func (q *PlayQueue) SortEntries() {
+	q.EntryMutex.Lock()
+	sort.Slice(q.Entries, func(i, j int) bool {
+		if q.Entries[i].Points == q.Entries[j].Points {
+			return q.Entries[i].AddedAt.Before(q.Entries[j].AddedAt)
+		}
+		return q.Entries[i].Points > q.Entries[j].Points
+	})
+	q.EntryMutex.Unlock()
+}
+
+func (q *PlayQueue) PlayNext() error {
 	if len(q.Entries) == 0 {
 		return nil
 	}
 
 	log.Println("Trying to play next Song")
 
-	e := q.Entries[0]
+	e := q.PopEntry()
 
 	log.Println("Playing next Song " + e.Hash + " " + e.Name)
 
@@ -255,8 +294,36 @@ func (q *Queue) PlayNext() error {
 	e.PlayedAt = time.Now()
 	WriteHistory(e, q.MusicDir)
 	log.Println("Song played: " + e.Name)
-	q.Entries = q.Entries[1:]
 	return nil
+}
+
+func (q *PlayQueue) VoteSong(id string, upvote bool) error {
+	amount := 1
+	if !upvote {
+		amount = -1
+	}
+	for i, e := range q.Entries {
+		if e.ID == id {
+			q.EntryMutex.Lock()
+			q.Entries[i].Points += amount
+			q.EntryMutex.Unlock()
+			q.SortEntries()
+			return nil
+		}
+	}
+	return errors.New("song not found")
+}
+
+func (q *Queue) DeleteSong(id string) error {
+	for i, e := range q.Entries {
+		if e.ID == id {
+			q.EntryMutex.Lock()
+			q.Entries = append(q.Entries[:i], q.Entries[i+1:]...)
+			q.EntryMutex.Unlock()
+			return nil
+		}
+	}
+	return errors.New("song not found")
 }
 
 func fileExists(filename string) bool {
@@ -275,17 +342,15 @@ func (q *Queue) DownloadNext() (Entry, error) {
 
 	log.Println("Trying to download next Song")
 
-	e := q.Entries[0]
-
+	e := q.PopEntry()
 	log.Println("Downloading next Song " + e.Hash)
-	q.Entries = q.Entries[1:]
 
 	fp := filepath.Join(q.MusicDir, e.Hash) + ".mp3"
 	if !fileExists(fp) {
 		log.Println("Downloading to " + fp)
 		err := downloader.Download(e.URL, e.Hash, q.MusicDir)
 		if err != nil {
-			return Entry{}, errors.New("Error downloading file: " + err.Error())
+			return e, errors.New("Error downloading file: " + err.Error())
 		}
 	} else {
 		log.Println("File already exists")

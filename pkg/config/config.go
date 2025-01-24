@@ -7,10 +7,20 @@ import (
 	"github.com/pelletier/go-toml"
 )
 
+type Operatingmode int
+
+const (
+	Simple Operatingmode = iota
+	Voting
+	UserVoting
+	UserCoins
+)
+
 type Config struct {
 	Port     int
 	MusicDir string
 	YTApiKey string
+	Mode     Operatingmode
 }
 
 func LoadConfig(filepath string) (Config, error) {

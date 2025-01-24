@@ -3,9 +3,9 @@ package user
 type userright int
 
 const (
-	Admin userright = iota
+	Unprivileged userright = iota
 	Moderator
-	Unprivileged
+	Admin
 )
 
 type User struct {
@@ -13,4 +13,5 @@ type User struct {
 	Password string    `json:"-"`
 	Salt     string    `json:"-"`
 	Right    userright `json:"-"`
+	Coins    int       `json:"coins"`
 }
