@@ -34,6 +34,8 @@ const (
 
 const baseURL = "https://www.googleapis.com/youtube/v3/search"
 
+var doneplaying = make(chan bool)
+
 type YouTubeResponse struct {
 	Items []struct {
 		ID struct {
@@ -237,6 +239,10 @@ func (q *PlayQueue) SortEntries() {
 	q.EntryMutex.Unlock()
 }
 
+func (q *PlayQueue) SkipSong() {
+	doneplaying <- true
+}
+
 func (q *PlayQueue) PlayNext() error {
 	if len(q.Entries) == 0 {
 		return nil
@@ -264,9 +270,8 @@ func (q *PlayQueue) PlayNext() error {
 
 	resampled := beep.Resample(4, format.SampleRate, sampleRate, streamer)
 
-	done := make(chan bool)
 	speaker.Play(beep.Seq(resampled, beep.Callback(func() {
-		done <- true
+		doneplaying <- true
 	})))
 
 	// Start a ticker to display the current position
@@ -283,13 +288,13 @@ func (q *PlayQueue) PlayNext() error {
 				q.SongPosition.Position = position
 				q.SongPosition.Length = length
 				q.SongPosition.Mutex.Unlock()
-			case <-done:
+			case <-doneplaying:
 				return
 			}
 		}
 	}()
 
-	<-done
+	<-doneplaying
 
 	e.PlayedAt = time.Now()
 	WriteHistory(e, q.MusicDir)

@@ -10,12 +10,12 @@ import (
 )
 
 func main() {
-	c, err := config.LoadConfig("config.toml")
+	c, err := config.LoadConfig("/home/philmacfly/Coding/go/src/github.com/Nerdbergev/rave2gether/config.toml")
 	if err != nil {
 		log.Fatal("Error loading config:", err)
 	}
 
-	r := api.GetAPIRouter(c.MusicDir, c.YTApiKey, c.Mode)
+	r := api.GetAPIRouter(c)
 
 	go api.DownloadQueue()
 

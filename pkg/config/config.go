@@ -18,9 +18,10 @@ const (
 
 type Config struct {
 	Port     int
-	MusicDir string
+	FileDir  string
 	YTApiKey string
 	Mode     Operatingmode
+	Secret   string
 }
 
 func LoadConfig(filepath string) (Config, error) {
