@@ -25,8 +25,8 @@ ytdlp and ffmpeg
 - Delete tracks from queue
 - Up and down vote songs
 - History of songs
+- User und Rights Managment
 
 ### Planed
 
-- User und Rights Managment
 - Webinterface

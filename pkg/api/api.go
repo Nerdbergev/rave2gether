@@ -14,7 +14,6 @@ import (
 	"github.com/Nerdbergev/rave2gether/pkg/config"
 	"github.com/Nerdbergev/rave2gether/pkg/queue"
 	"github.com/Nerdbergev/rave2gether/pkg/user"
-	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth/v5"
 )
@@ -23,29 +22,6 @@ var playlist queue.PlayQueue
 var downloadlist queue.DownloadQueue
 var tokenAuth *jwtauth.JWTAuth
 var userdb user.UserDB
-
-type errorResponse struct {
-	Httpstatus   string `json:"httpstatus"`
-	Errormessage string `json:"errormessage"`
-	RequestURL   string `json:"requesturl"`
-}
-
-type addSongRequest struct {
-	Queries []string `json:"queries"`
-}
-
-type voteRequest struct {
-	Upvote bool `json:"upvote"`
-}
-
-type positionResponse struct {
-	Position time.Duration `json:"position"`
-	Length   time.Duration `json:"length"`
-}
-
-type authResponse struct {
-	Token string `json:"token"`
-}
 
 func apierror(w http.ResponseWriter, r *http.Request, err string, httpcode int) {
 	log.Println(err)
@@ -263,7 +239,160 @@ func Authenticator(ja *jwtauth.JWTAuth, ur user.Userright) func(http.Handler) ht
 	}
 }
 
-func GetAPIRouter(cfg config.Config) *chi.Mux {
+func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+	users := userdb.ListUsers()
+	j, err := json.MarshalIndent(users, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling users: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
+func addUserHandler(w http.ResponseWriter, r *http.Request) {
+	var req addUserRequest
+	log.Println("Adding user")
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = userdb.AddUser(req.Username, req.Password, user.Userright(req.Right))
+	if err != nil {
+		apierror(w, r, "Error adding user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func changePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	var req passwordChangeRequest
+	log.Println("Changing password")
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	username, _ := claims["username"].(string)
+	u, err := userdb.GetUser(username)
+	if err != nil {
+		apierror(w, r, "Error getting user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err = u.SetPassword(req.NewPassword)
+	if err != nil {
+		apierror(w, r, "Error setting password: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func getCoinsHandler(w http.ResponseWriter, r *http.Request) {
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	username, _ := claims["username"].(string)
+	u, err := userdb.GetUser(username)
+	if err != nil {
+		apierror(w, r, "Error getting user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	j, err := json.MarshalIndent(coinsResponse{u.Coins}, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling coins: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
+func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
+	user := chi.URLParam(r, "username")
+	if user == "" {
+		apierror(w, r, "No user provided", http.StatusBadRequest)
+		return
+	}
+	err := userdb.RemoveUser(user)
+	if err != nil {
+		apierror(w, r, "Error deleting user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func updateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var req addUserRequest
+	u := chi.URLParam(r, "username")
+	if u == "" {
+		apierror(w, r, "No user provided", http.StatusBadRequest)
+		return
+	}
+	log.Println("Updating user")
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = userdb.UpdateUser(u, req.Password, user.Userright(req.Right))
+	if err != nil {
+		apierror(w, r, "Error updating user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func setCoinsHandler(w http.ResponseWriter, r *http.Request) {
+	user := chi.URLParam(r, "username")
+	if user == "" {
+		apierror(w, r, "No user provided", http.StatusBadRequest)
+		return
+	}
+	var req coinsResponse
+	log.Println("Setting coins")
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = userdb.SetUserCoins(user, req.Coins)
+	if err != nil {
+		apierror(w, r, "Error setting coins: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func addCoinsHandler(w http.ResponseWriter, r *http.Request) {
+	user := chi.URLParam(r, "username")
+	if user == "" {
+		apierror(w, r, "No user provided", http.StatusBadRequest)
+		return
+	}
+	var req coinsResponse
+	log.Println("Adding coins")
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	u, err := userdb.GetUser(user)
+	if err != nil {
+		apierror(w, r, "Error getting user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	u.Coins += req.Coins
+	err = userdb.SetUserCoins(user, u.Coins)
+	if err != nil {
+		apierror(w, r, "Error setting coins: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 	playlist.Queue.MusicDir = cfg.FileDir
 	downloadlist.Queue.MusicDir = cfg.FileDir
 	downloadlist.APIKey = cfg.YTApiKey
@@ -280,14 +409,6 @@ func GetAPIRouter(cfg config.Config) *chi.Mux {
 		}
 	}
 
-	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	r.Use(middleware.Timeout(60 * time.Second))
 	r.Route("/api", func(r chi.Router) {
 		if cfg.Mode > config.Voting {
 			r.Post("/token", apiGetTokenHandler)
@@ -322,6 +443,26 @@ func GetAPIRouter(cfg config.Config) *chi.Mux {
 
 			})
 		})
+		if cfg.Mode > config.Voting {
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", getUsersHandler)
+				r.Post("/{username}/password", changePasswordHandler)
+				r.Get("/{username}/coins", getCoinsHandler)
+				r.Group(func(r chi.Router) {
+					r.Use(Authenticator(tokenAuth, user.Moderator))
+					r.Post("/{username}/coins", setCoinsHandler)
+					r.Post("/{username}/addcoins", addCoinsHandler)
+				})
+				r.Group(func(r chi.Router) {
+					r.Use(Authenticator(tokenAuth, user.Admin))
+					r.Post("/", addUserHandler)
+					r.Route("/{username}", func(r chi.Router) {
+						r.Delete("/", deleteUserHandler)
+						r.Put("/", updateUserHandler)
+					})
+				})
+			})
+		}
 		r.Route("/history", func(r chi.Router) {
 			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				getHistoryHandler(w, r, cfg.FileDir)
@@ -329,5 +470,4 @@ func GetAPIRouter(cfg config.Config) *chi.Mux {
 		})
 	})
 
-	return r
 }

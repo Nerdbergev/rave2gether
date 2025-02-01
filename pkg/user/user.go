@@ -111,11 +111,11 @@ func (udb *UserDB) GetUser(username string) (User, error) {
 	return u, nil
 }
 
-func (udb *UserDB) AddUser(username string, password string) error {
+func (udb *UserDB) AddUser(username string, password string, right Userright) error {
 	if udb.DoesUserExist(username) {
 		return errors.New("User already exists")
 	}
-	u := User{Username: username}
+	u := User{Username: username, Right: right}
 	err := u.SetPassword(password)
 	if err != nil {
 		return errors.New("Error setting password: " + err.Error())
