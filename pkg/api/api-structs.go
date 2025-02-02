@@ -16,9 +16,13 @@ type voteRequest struct {
 	Upvote bool `json:"upvote"`
 }
 
-type positionResponse struct {
+type currentSongResponse struct {
+	Name     string        `json:"name"`
 	Position time.Duration `json:"position"`
 	Length   time.Duration `json:"length"`
+	AddedBy  string        `json:"addedby"`
+	AddedAt  time.Time     `json:"addedat"`
+	Points   int           `json:"points"`
 }
 
 type authResponse struct {

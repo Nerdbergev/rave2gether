@@ -47,7 +47,8 @@ type YouTubeResponse struct {
 	} `json:"items"`
 }
 
-type SongPosition struct {
+type SongInfo struct {
+	Entry
 	Position time.Duration `json:"position"`
 	Length   time.Duration `json:"length"`
 	Mutex    sync.Mutex    `json:"-"`
@@ -65,19 +66,19 @@ type DownloadQueue struct {
 }
 
 type PlayQueue struct {
-	SongPosition SongPosition
+	SongInfo SongInfo
 	Queue
 }
 
 type Entry struct {
-	ID       string
-	Name     string
-	URL      string
-	Hash     string
-	Addedby  string
-	AddedAt  time.Time
-	PlayedAt time.Time
-	Points   int
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	URL      string    `json:"url"`
+	Hash     string    `json:"hash"`
+	AddedBy  string    `json:"addedby"`
+	AddedAt  time.Time `json:"addedat"`
+	PlayedAt time.Time `json:"playedat"`
+	Points   int       `json:"points"`
 }
 
 func init() {
@@ -173,7 +174,7 @@ func searchYouTube(query string, maxResults int, apiKey string) ([]map[string]st
 
 func (q *DownloadQueue) AddEntry(input string, user user.User) error {
 	var e Entry
-	e.Addedby = user.Username
+	e.AddedBy = user.Username
 	e.AddedAt = time.Now()
 	if isValidUrl(input) {
 		e.URL = input
@@ -228,6 +229,12 @@ func (q *Queue) GetAllEntries() []Entry {
 	return q.Entries
 }
 
+func (q *Queue) GetEntryCount() int {
+	q.EntryMutex.Lock()
+	defer q.EntryMutex.Unlock()
+	return len(q.Entries)
+}
+
 func (q *PlayQueue) SortEntries() {
 	q.EntryMutex.Lock()
 	sort.Slice(q.Entries, func(i, j int) bool {
@@ -251,6 +258,10 @@ func (q *PlayQueue) PlayNext() error {
 	log.Println("Trying to play next Song")
 
 	e := q.PopEntry()
+
+	q.SongInfo.Mutex.Lock()
+	q.SongInfo.Entry = e
+	q.SongInfo.Mutex.Unlock()
 
 	log.Println("Playing next Song " + e.Hash + " " + e.Name)
 
@@ -284,10 +295,10 @@ func (q *PlayQueue) PlayNext() error {
 			case <-ticker.C:
 				position := sampleRate.D(streamer.Position())
 				length := sampleRate.D(streamer.Len())
-				q.SongPosition.Mutex.Lock()
-				q.SongPosition.Position = position
-				q.SongPosition.Length = length
-				q.SongPosition.Mutex.Unlock()
+				q.SongInfo.Mutex.Lock()
+				q.SongInfo.Position = position
+				q.SongInfo.Length = length
+				q.SongInfo.Mutex.Unlock()
 			case <-doneplaying:
 				return
 			}

@@ -22,6 +22,9 @@ var playlist queue.PlayQueue
 var downloadlist queue.DownloadQueue
 var tokenAuth *jwtauth.JWTAuth
 var userdb user.UserDB
+var idleSleep = 500
+
+const maxSleep = 5000
 
 func apierror(w http.ResponseWriter, r *http.Request, err string, httpcode int) {
 	log.Println(err)
@@ -50,7 +53,12 @@ func addtoQueueHandler(w http.ResponseWriter, r *http.Request) {
 		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	u := user.User{Username: "Fick Hans"}
+	_, claims, _ := jwtauth.FromContext(r.Context())
+	username, _ := claims["username"].(string)
+	if username == "" {
+		username = "Fick Hans"
+	}
+	u := user.User{Username: username}
 	for _, q := range req.Queries {
 		if q == "" {
 			continue
@@ -65,7 +73,9 @@ func addtoQueueHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func listQueueHandler(w http.ResponseWriter, r *http.Request) {
-	j, err := json.MarshalIndent(playlist.Entries, "", "    ")
+	var ee []queue.Entry
+	ee = append(ee, playlist.Entries...)
+	j, err := json.MarshalIndent(ee, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -73,11 +83,11 @@ func listQueueHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-func getSongPositionHandler(w http.ResponseWriter, r *http.Request) {
-	playlist.SongPosition.Mutex.Lock()
-	posi := positionResponse{playlist.SongPosition.Position, playlist.SongPosition.Length}
-	playlist.SongPosition.Mutex.Unlock()
-	j, err := json.MarshalIndent(posi, "", "    ")
+func getCurrentSongHandler(w http.ResponseWriter, r *http.Request) {
+	playlist.SongInfo.Mutex.Lock()
+	info := currentSongResponse{playlist.SongInfo.Name, playlist.SongInfo.Position, playlist.SongInfo.Length, playlist.SongInfo.AddedBy, playlist.SongInfo.AddedAt, playlist.SongInfo.Points}
+	playlist.SongInfo.Mutex.Unlock()
+	j, err := json.MarshalIndent(info, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -123,25 +133,39 @@ func deleteSongHandler(w http.ResponseWriter, r *http.Request) {
 
 func DownloadQueue() {
 	for {
+		if downloadlist.GetEntryCount() == 0 {
+			time.Sleep(time.Millisecond * time.Duration(idleSleep))
+			if idleSleep < maxSleep {
+				idleSleep += 500
+			}
+			continue
+		}
 		e, err := downloadlist.DownloadNext()
 		if err != nil {
 			log.Printf("Error downloading Song: %v ID: %v Error: %v", e.Name, e.ID, err)
 		} else {
 			if e.Hash != "" {
 				playlist.Entries = append(playlist.Entries, e)
-				time.Sleep(500 * time.Millisecond)
 			}
 		}
+		idleSleep = 500
 	}
 }
 
 func WorkQueue() {
 	for {
+		if playlist.GetEntryCount() == 0 {
+			time.Sleep(time.Millisecond * time.Duration(idleSleep))
+			if idleSleep < maxSleep {
+				idleSleep += 500
+			}
+			continue
+		}
 		err := playlist.PlayNext()
 		if err != nil {
 			log.Println("Error playing next:", err)
 		}
-		time.Sleep(500 * time.Millisecond)
+		idleSleep = 500
 	}
 }
 
@@ -198,7 +222,40 @@ func apiGetTokenHandler(w http.ResponseWriter, r *http.Request) {
 		loginUnsucessfull(w, r)
 		return
 	}
-	_, tokenString, err := tokenAuth.Encode(map[string]interface{}{"username": u.Username, "exp": time.Now().Add(time.Hour).Unix()})
+	claims := map[string]interface{}{"username": u.Username}
+	jwtauth.SetExpiryIn(claims, time.Hour)
+	jwtauth.SetIssuedNow(claims)
+	_, tokenString, err := tokenAuth.Encode(claims)
+	if err != nil {
+		apierror(w, r, "Error encoding token: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	j, err := json.MarshalIndent(authResponse{tokenString}, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling token: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
+func apiRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	tokenstr := jwtauth.TokenFromHeader(r)
+	token, err := tokenAuth.Decode(tokenstr)
+	if err != nil {
+		tokenInvalid(w, r)
+		return
+	}
+	cl := token.PrivateClaims()
+	username, ok := cl["username"].(string)
+	if !ok || !userdb.DoesUserExist(username) {
+		tokenInvalid(w, r)
+		return
+	}
+
+	claims := map[string]interface{}{"username": username}
+	jwtauth.SetExpiryIn(claims, time.Hour)
+	jwtauth.SetIssuedNow(claims)
+	_, tokenString, err := tokenAuth.Encode(claims)
 	if err != nil {
 		apierror(w, r, "Error encoding token: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -398,6 +455,10 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 	downloadlist.APIKey = cfg.YTApiKey
 
 	if cfg.Mode > config.Voting {
+		tokenAuth = jwtauth.New("HS256", []byte(cfg.Secret), nil)
+	}
+
+	if cfg.Mode > config.Voting {
 		err := userdb.LoadFromFile(cfg.FileDir + "/users.txt")
 		if err != nil {
 			log.Fatalln("Error loading userdb:", err)
@@ -412,13 +473,13 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 	r.Route("/api", func(r chi.Router) {
 		if cfg.Mode > config.Voting {
 			r.Post("/token", apiGetTokenHandler)
+			r.Post("/refreshtoken", apiRefreshTokenHandler)
 		}
 		r.Route("/queue", func(r chi.Router) {
 			r.Get("/", listQueueHandler)
-			r.Get("/position", getSongPositionHandler)
+			r.Get("/current", getCurrentSongHandler)
 			r.Group(func(r chi.Router) {
 				if cfg.Mode > config.Voting {
-					tokenAuth = jwtauth.New("HS256", []byte(cfg.Secret), nil)
 					r.Use(jwtauth.Verifier(tokenAuth))
 					r.Use(jwtauth.Authenticator(tokenAuth))
 				}
