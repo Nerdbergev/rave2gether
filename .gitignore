@@ -22,3 +22,24 @@ vendor/
 
 #And parts
 *.part
+
+.DS_*
+*.log
+logs
+**/*.backup.*
+**/*.back.*
+
+node_modules
+bower_components
+
+*.sublime*
+
+psd
+thumb
+sketch
+
+.vscode
+*.json
+*.txt
+main
+rave2gether

@@ -2,6 +2,7 @@ package queue
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -34,8 +35,6 @@ const (
 
 const baseURL = "https://www.googleapis.com/youtube/v3/search"
 
-var doneplaying = make(chan bool)
-
 type YouTubeResponse struct {
 	Items []struct {
 		ID struct {
@@ -58,6 +57,7 @@ type Queue struct {
 	MusicDir   string
 	EntryMutex sync.Mutex
 	Entries    []Entry
+	SongInfo   SongInfo
 }
 
 type DownloadQueue struct {
@@ -66,8 +66,9 @@ type DownloadQueue struct {
 }
 
 type PlayQueue struct {
-	SongInfo SongInfo
 	Queue
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 type Entry struct {
@@ -79,6 +80,7 @@ type Entry struct {
 	AddedAt  time.Time `json:"addedat"`
 	PlayedAt time.Time `json:"playedat"`
 	Points   int       `json:"points"`
+	votedFor map[string]int
 }
 
 func init() {
@@ -174,6 +176,7 @@ func searchYouTube(query string, maxResults int, apiKey string) ([]map[string]st
 
 func (q *DownloadQueue) AddEntry(input string, user user.User) error {
 	var e Entry
+	e.votedFor = make(map[string]int)
 	e.AddedBy = user.Username
 	e.AddedAt = time.Now()
 	if isValidUrl(input) {
@@ -196,8 +199,8 @@ func (q *DownloadQueue) AddEntry(input string, user user.User) error {
 			return errors.New("Error searching for song: " + err.Error())
 		}
 
-		for i, r := range result {
-			fmt.Println(i, r)
+		if len(result) == 0 {
+			return errors.New("no results found")
 		}
 
 		e.Name = html.UnescapeString(result[0]["title"])
@@ -247,7 +250,7 @@ func (q *PlayQueue) SortEntries() {
 }
 
 func (q *PlayQueue) SkipSong() {
-	doneplaying <- true
+	q.cancelFunc()
 }
 
 func (q *PlayQueue) PlayNext() error {
@@ -280,9 +283,10 @@ func (q *PlayQueue) PlayNext() error {
 	defer streamer.Close()
 
 	resampled := beep.Resample(4, format.SampleRate, sampleRate, streamer)
-
+	q.ctx, q.cancelFunc = context.WithCancel(context.Background())
+	defer q.cancelFunc()
 	speaker.Play(beep.Seq(resampled, beep.Callback(func() {
-		doneplaying <- true
+		q.cancelFunc()
 	})))
 
 	// Start a ticker to display the current position
@@ -299,13 +303,19 @@ func (q *PlayQueue) PlayNext() error {
 				q.SongInfo.Position = position
 				q.SongInfo.Length = length
 				q.SongInfo.Mutex.Unlock()
-			case <-doneplaying:
+			case <-q.ctx.Done():
 				return
 			}
 		}
 	}()
 
-	<-doneplaying
+	<-q.ctx.Done()
+
+	q.SongInfo.Mutex.Lock()
+	q.SongInfo.Entry = Entry{}
+	q.SongInfo.Position = 0
+	q.SongInfo.Length = 0
+	q.SongInfo.Mutex.Unlock()
 
 	e.PlayedAt = time.Now()
 	WriteHistory(e, q.MusicDir)
@@ -313,7 +323,7 @@ func (q *PlayQueue) PlayNext() error {
 	return nil
 }
 
-func (q *PlayQueue) VoteSong(id string, upvote bool) error {
+func (q *PlayQueue) VoteSong(id string, upvote bool, user user.User) error {
 	amount := 1
 	if !upvote {
 		amount = -1
@@ -321,6 +331,15 @@ func (q *PlayQueue) VoteSong(id string, upvote bool) error {
 	for i, e := range q.Entries {
 		if e.ID == id {
 			q.EntryMutex.Lock()
+			lastvote, ok := q.Entries[i].votedFor[user.Username]
+			if ok {
+				if lastvote == amount {
+					q.EntryMutex.Unlock()
+					return errors.New("already voted")
+				}
+				q.Entries[i].Points -= lastvote
+			}
+			q.Entries[i].votedFor[user.Username] = amount
 			q.Entries[i].Points += amount
 			q.EntryMutex.Unlock()
 			q.SortEntries()
@@ -359,6 +378,11 @@ func (q *Queue) DownloadNext() (Entry, error) {
 	log.Println("Trying to download next Song")
 
 	e := q.PopEntry()
+
+	q.SongInfo.Mutex.Lock()
+	q.SongInfo.Entry = e
+	q.SongInfo.Mutex.Unlock()
+
 	log.Println("Downloading next Song " + e.Hash)
 
 	fp := filepath.Join(q.MusicDir, e.Hash) + ".mp3"
@@ -371,5 +395,10 @@ func (q *Queue) DownloadNext() (Entry, error) {
 	} else {
 		log.Println("File already exists")
 	}
+
+	q.SongInfo.Mutex.Lock()
+	q.SongInfo.Entry = Entry{}
+	q.SongInfo.Mutex.Unlock()
+
 	return e, nil
 }
