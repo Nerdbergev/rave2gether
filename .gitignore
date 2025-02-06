@@ -39,7 +39,7 @@ thumb
 sketch
 
 .vscode
-*.json
+history.json
 *.txt
 main
 rave2gether

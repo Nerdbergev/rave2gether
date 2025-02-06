@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Override default backgrounds to make the entire page black */
+html, body {
+  background-color: #101828;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
