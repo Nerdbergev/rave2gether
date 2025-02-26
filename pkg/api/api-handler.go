@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -162,6 +163,26 @@ func skipSongHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func getTokens(username string) (string, string, error) {
+	claims := map[string]interface{}{"username": username, "refresh": false}
+	jwtauth.SetExpiryIn(claims, time.Hour)
+	jwtauth.SetIssuedNow(claims)
+	_, tokenString, err := tokenAuth.Encode(claims)
+	if err != nil {
+		err := fmt.Errorf("error encoding token: %v", err.Error())
+		return "", "", err
+	}
+	claims["refresh"] = true
+	jwtauth.SetExpiryIn(claims, time.Hour*24)
+	jwtauth.SetIssuedNow(claims)
+	_, refreshTokenString, err := tokenAuth.Encode(claims)
+	if err != nil {
+		err := fmt.Errorf("error encoding token: %v", err.Error())
+		return "", "", err
+	}
+	return tokenString, refreshTokenString, nil
+}
+
 func apiGetTokenHandler(w http.ResponseWriter, r *http.Request) {
 	auth := r.Header.Get("Authorization")
 	s := strings.Split(auth, " ")
@@ -198,15 +219,12 @@ func apiGetTokenHandler(w http.ResponseWriter, r *http.Request) {
 		loginUnsucessfull(w, r)
 		return
 	}
-	claims := map[string]interface{}{"username": u.Username}
-	jwtauth.SetExpiryIn(claims, time.Hour)
-	jwtauth.SetIssuedNow(claims)
-	_, tokenString, err := tokenAuth.Encode(claims)
+	tokenString, refreshTokenString, err := getTokens(u.Username)
 	if err != nil {
-		apierror(w, r, "Error encoding token: "+err.Error(), http.StatusInternalServerError)
+		apierror(w, r, "Error getting tokens: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	j, err := json.MarshalIndent(authResponse{tokenString}, "", "    ")
+	j, err := json.MarshalIndent(authResponse{tokenString, refreshTokenString}, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling token: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -227,16 +245,35 @@ func apiRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 		tokenInvalid(w, r)
 		return
 	}
-
-	claims := map[string]interface{}{"username": username}
-	jwtauth.SetExpiryIn(claims, time.Hour)
-	jwtauth.SetIssuedNow(claims)
-	_, tokenString, err := tokenAuth.Encode(claims)
+	decoder := json.NewDecoder(r.Body)
+	var req refreshRequest
+	err = decoder.Decode(&req)
 	if err != nil {
-		apierror(w, r, "Error encoding token: "+err.Error(), http.StatusInternalServerError)
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	j, err := json.MarshalIndent(authResponse{tokenString}, "", "    ")
+	refreshtoken, err := tokenAuth.Decode(req.RefreshToken)
+	if err != nil {
+		tokenInvalid(w, r)
+		return
+	}
+	rcl := refreshtoken.PrivateClaims()
+	ruser, ok := rcl["username"].(string)
+	if !ok || ruser != username {
+		tokenInvalid(w, r)
+		return
+	}
+	if refreshtoken.Expiration().Before(time.Now()) {
+		tokenInvalid(w, r)
+		return
+	}
+
+	tokenString, refreshTokenString, err := getTokens(username)
+	if err != nil {
+		apierror(w, r, "Error getting tokens: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	j, err := json.MarshalIndent(authResponse{tokenString, refreshTokenString}, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling token: "+err.Error(), http.StatusInternalServerError)
 		return

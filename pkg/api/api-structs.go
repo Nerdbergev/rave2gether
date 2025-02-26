@@ -26,7 +26,8 @@ type currentSongResponse struct {
 }
 
 type authResponse struct {
-	Token string `json:"token"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type addUserRequest struct {
@@ -41,4 +42,8 @@ type passwordChangeRequest struct {
 
 type coinsResponse struct {
 	Coins int `json:"coins"`
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
 }
