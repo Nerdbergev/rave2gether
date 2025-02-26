@@ -66,7 +66,11 @@ func Authenticator(ja *jwtauth.JWTAuth, ur user.Userright) func(http.Handler) ht
 				tokenInvalid(w, r)
 				return
 			}
-
+			isrefresh, ok := claims["refresh"].(bool)
+			if !ok || isrefresh {
+				tokenInvalid(w, r)
+				return
+			}
 			username, ok := claims["username"].(string)
 			if !ok {
 				tokenInvalid(w, r)
@@ -119,7 +123,7 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 			r.Group(func(r chi.Router) {
 				if cfg.Mode > config.Voting {
 					r.Use(jwtauth.Verifier(tokenAuth))
-					r.Use(jwtauth.Authenticator(tokenAuth))
+					r.Use(Authenticator(tokenAuth, user.Unprivileged))
 				}
 				r.Post("/", addtoQueueHandler)
 				r.Group(func(r chi.Router) {
@@ -145,12 +149,12 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 		if cfg.Mode > config.Voting {
 			r.Route("/self", func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
-				r.Use(jwtauth.Authenticator(tokenAuth))
+				r.Use(Authenticator(tokenAuth, user.Unprivileged))
 				r.Get("/", selfHandler)
 			})
 			r.Route("/users", func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
-				r.Use(jwtauth.Authenticator(tokenAuth))
+				r.Use(Authenticator(tokenAuth, user.Unprivileged))
 				r.Get("/", getUsersHandler)
 				r.Post("/{username}/password", changePasswordHandler)
 				r.Get("/{username}/coins", getCoinsHandler)
