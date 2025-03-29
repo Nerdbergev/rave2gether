@@ -120,9 +120,7 @@ const Queue: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-lg mx-auto bg-gray-800 shadow-md rounded-lg">
-      <h2 className="text-xl font-bold text-white mb-4">Rave 2 Gether</h2>
-
+    <div className="mt-8 p-6 max-w-lg mx-auto bg-gray-800 shadow-md rounded-lg">
           {/* Error Message */}
             {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">

@@ -14,6 +14,7 @@ const isTokenExpired = (token: string): boolean => {
     // 'exp' is in seconds, so compare with current time in seconds.
     return decoded.exp < Date.now() / 1000;
   } catch (error) {
+    console.error("Failed to decode token", error);
     return true;
   }
 };
@@ -45,6 +46,7 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${newToken}`;
       } catch (error) {
         // If refreshing fails, log out and redirect.
+        console.error("Token expired and refresh failed", error);
         logout();
         window.location.href = "/login";
         return Promise.reject("Token expired and refresh failed");

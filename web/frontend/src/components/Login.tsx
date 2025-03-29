@@ -1,20 +1,30 @@
 // src/components/Login.tsx
 import React, { useState } from "react";
-import { login } from "../services/authService";
+import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const { login } = useAuth();
   const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (error) {
+      setError(error)
+    } else {
+      setError(null)
+    }
     try {
+      // Call the login method from AuthContext.
       await login(username, password);
+      // On success, redirect to the queue page (or another page).
       navigate("/queue");
-    } catch (error) {
-      alert(error);
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Invalid credentials. Please try again.");
     }
   };
 
