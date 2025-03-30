@@ -112,6 +112,9 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 	}
 
 	r.Route("/api", func(r chi.Router) {
+		r.Get("/mode", func(w http.ResponseWriter, r *http.Request) {
+			apiModeHandler(w, r, cfg.Mode)
+		})
 		if cfg.Mode > config.Voting {
 			r.Post("/token", apiGetTokenHandler)
 			r.Post("/refreshtoken", apiRefreshTokenHandler)

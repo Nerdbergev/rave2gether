@@ -23,3 +23,15 @@ export interface User {
     rights: UserRight;
     coins: number;
 }
+
+export enum Mode {
+    Simple = 0,
+    Voting = 1,
+    UserVoting = 2,
+    UserCoin = 3,
+  }
+
+export interface AppConfig {
+    mode: Mode;
+}
+  

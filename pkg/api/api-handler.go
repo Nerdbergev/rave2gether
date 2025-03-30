@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Nerdbergev/rave2gether/pkg/config"
 	"github.com/Nerdbergev/rave2gether/pkg/queue"
 	"github.com/Nerdbergev/rave2gether/pkg/user"
 	"github.com/go-chi/chi/v5"
@@ -445,6 +446,15 @@ func selfHandler(w http.ResponseWriter, r *http.Request) {
 	j, err := json.MarshalIndent(u, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
+func apiModeHandler(w http.ResponseWriter, r *http.Request, mode config.Operatingmode) {
+	j, err := json.MarshalIndent(modeResponse{mode}, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling mode: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Write(j)

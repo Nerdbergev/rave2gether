@@ -1,6 +1,6 @@
 // src/components/QueueItem.tsx
 import React from "react";
-import { Song } from "../types";
+import { Mode, Song } from "../types";
 import QueueItemType from "./QueueItemType";
 
 interface QueueItemProps {
@@ -10,6 +10,7 @@ interface QueueItemProps {
   onDownvote: (id: string) => void;
   onDelete: (id: string) => void;
   onSkip: (id: string) => void;
+  mode: Mode;
 }
 
 const formatTime = (nanoseconds: number): string => {
@@ -19,7 +20,9 @@ const formatTime = (nanoseconds: number): string => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownvote, onDelete, onSkip }) => {
+const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownvote, onDelete, onSkip, mode }) => {
+  const modeIsVoting = mode !== Mode.Simple;
+
   return (
     <div className="p-4 bg-gray-600 rounded-lg shadow-sm hover:bg-gray-500 transition-colors">
       <div className="flex flex-col">
@@ -42,22 +45,28 @@ const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownv
         )}
         {itemType == QueueItemType.QUEUE && (
             <div className="mt2 flex flex-col space-y-2">
+             { modeIsVoting && (
             <span className="text-md font-semibold text-gray-200">Votes: {song.points}</span>
+              )
+            }
             <div className="flex space-x-2">
-            <button
-                onClick={() => onUpvote(song.id)}
-                className="bg-green-500 hover:bg-green-600 text-white rounded px-2 py-1 transition-colors"
-                title="Upvote"
-            >
-                ▲
-            </button>
-            <button
-                onClick={() => onDownvote(song.id)}
-                className="bg-red-500 hover:bg-red-600 text-white rounded px-2 py-1 transition-colors"
-                title="Downvote"
-            >
-                ▼
-            </button>
+            { modeIsVoting && (
+              <>
+              <button
+                  onClick={() => onUpvote(song.id)}
+                  className="bg-green-500 hover:bg-green-600 text-white rounded px-2 py-1 transition-colors"
+                  title="Upvote"
+              > ▲
+              </button>
+              <button
+                  onClick={() => onDownvote(song.id)}
+                  className="bg-red-500 hover:bg-red-600 text-white rounded px-2 py-1 transition-colors"
+                  title="Downvote"
+              >
+                  ▼
+              </button>
+              </>
+            ) }
             <button
                 onClick={() => onDelete(song.id)}
                 className="bg-gray-700 hover:bg-gray-600 text-white rounded px-2 py-1 transition-colors"

@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, ReactNode, FC } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, FC } from 'react';
 import api from "../api";
 
 export interface AuthTokens {
@@ -10,6 +10,7 @@ export interface AuthTokens {
 export interface User {
   username: string;
   role: string;
+  coins: number;
   // add any additional properties that /api/self returns
 }
 
@@ -35,6 +36,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   // Load user info from /api/self using the current access token
   const loadUserInfo = async (): Promise<void> => {
+    if (!tokens) {
+      setUser(null);
+      return;
+    }
     try {
       const response = await api.get('/self');
       const userData: User = await response.data;
@@ -47,16 +52,21 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   // Login: send credentials to /api/login, store tokens, then fetch user info
   const login = async (username: string, password: string): Promise<void> => {
-    const response = await api.post("/token", {}, {
-      auth: {
-        username,
-        password,
-      },
-    });
-    setTokens(response.data);
-    localStorage.setItem('token', response.data.token);
-    localStorage.setItem('refreshToken', response.data.refresh_token);
-    await loadUserInfo();
+    try {
+      const response = await api.post("/token", {}, {
+        auth: {
+          username,
+          password,
+        },
+      });
+      setTokens(response.data);
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('refreshToken', response.data.refresh_token);
+      await loadUserInfo();
+    } catch (error) {
+      console.error('Login failed', error);
+      setUser(null);
+    }
   };
 
   // Logout: clear tokens and user info
@@ -70,21 +80,24 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // Refresh the access token using the refresh token, then update user info
   const refreshAccessToken = async (): Promise<void> => {
     if (!tokens) return;
-    const response = await fetch('/api/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: tokens.refreshToken }),
-    });
-    if (!response.ok) {
-      logout();
-      throw new Error('Token refresh failed');
+    try {
+      const response = await api.post('/refresh', { refresh_token: tokens.refreshToken });
+      const newTokens: AuthTokens = response.data;
+      setTokens(newTokens);
+      localStorage.setItem('token', newTokens.accessToken);
+      await loadUserInfo();
     }
-    const data: { accessToken: string } = await response.json();
-    const newTokens: AuthTokens = { ...tokens, accessToken: data.accessToken };
-    setTokens(newTokens);
-    localStorage.setItem('token', data.accessToken);
-    await loadUserInfo();
+    catch (error) {
+      console.error('Token refresh failed', error);
+      logout();
+    }
   };
+
+  useEffect(() => {
+    if (tokens) {
+      loadUserInfo();
+    }
+  }, [tokens])
 
   return (
     <AuthContext.Provider

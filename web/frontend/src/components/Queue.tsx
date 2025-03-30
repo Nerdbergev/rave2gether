@@ -4,8 +4,13 @@ import { fetchQueue, fetchDownloadQueue, addToQueue, skipSong, deleteSong, fetch
 import { Song } from "../types";
 import QueueItem from "./QueueItem";
 import QueueItemType from "./QueueItemType";
+import { Mode } from "../types";
 
-const Queue: React.FC = () => {
+interface QueueProps {
+  mode: Mode;
+}
+
+const Queue: React.FC<QueueProps> = ({mode}) => {
   const [queue, setQueue] = useState<Song[]>([]);
   const [downloadQueue, setDownloadQueue] = useState<Song[]>([]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -156,6 +161,7 @@ const Queue: React.FC = () => {
                     onDownvote={() => {}}
                     onDelete={() => {}}
                     onSkip={handleSkipSong}
+                    mode = {mode}
                 />
             </div>
         ) : (
@@ -179,6 +185,7 @@ const Queue: React.FC = () => {
               onDownvote={handleDownvote}
               onDelete={handleDeleteSong}
               onSkip={() => {}}
+              mode = {mode}
             />
           ))
         )}
@@ -198,6 +205,7 @@ const Queue: React.FC = () => {
               onDownvote={() => {}}
               onDelete={() => {}}
               onSkip={() => {}}
+              mode = {mode}
             />
           ))
         )}

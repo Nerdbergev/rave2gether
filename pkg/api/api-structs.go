@@ -1,6 +1,10 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/Nerdbergev/rave2gether/pkg/config"
+)
 
 type errorResponse struct {
 	Httpstatus   string `json:"httpstatus"`
@@ -46,4 +50,8 @@ type coinsResponse struct {
 
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+type modeResponse struct {
+	Mode config.Operatingmode `json:"mode"`
 }
