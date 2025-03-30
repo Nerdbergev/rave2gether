@@ -421,13 +421,7 @@ func addCoinsHandler(w http.ResponseWriter, r *http.Request) {
 		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	u, err := userdb.GetUser(user)
-	if err != nil {
-		apierror(w, r, "Error getting user: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	u.Coins += req.Coins
-	err = userdb.SetUserCoins(user, u.Coins)
+	err = userdb.AddUserCoins(user, req.Coins)
 	if err != nil {
 		apierror(w, r, "Error setting coins: "+err.Error(), http.StatusInternalServerError)
 		return

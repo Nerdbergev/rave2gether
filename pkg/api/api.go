@@ -58,25 +58,34 @@ func WorkQueue() {
 	}
 }
 
+func getUserFromToken(r *http.Request) (user.User, error) {
+	_, claims, err := jwtauth.FromContext(r.Context())
+	if err != nil {
+		log.Println("Error getting claims from context:", err)
+		return user.User{}, err
+	}
+	isrefresh, ok := claims["refresh"].(bool)
+	if !ok || isrefresh {
+		log.Println("Error token is refresh token")
+		return user.User{}, err
+	}
+	username, ok := claims["username"].(string)
+	if !ok {
+		log.Println("Error getting username from token")
+		return user.User{}, err
+	}
+	u, err := userdb.GetUser(username)
+	if err != nil {
+		log.Println("Error getting user from userdb:", err)
+		return user.User{}, err
+	}
+	return u, nil
+}
+
 func Authenticator(ja *jwtauth.JWTAuth, ur user.Userright) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, claims, err := jwtauth.FromContext(r.Context())
-			if err != nil {
-				tokenInvalid(w, r)
-				return
-			}
-			isrefresh, ok := claims["refresh"].(bool)
-			if !ok || isrefresh {
-				tokenInvalid(w, r)
-				return
-			}
-			username, ok := claims["username"].(string)
-			if !ok {
-				tokenInvalid(w, r)
-				return
-			}
-			u, err := userdb.GetUser(username)
+			u, err := getUserFromToken(r)
 			if err != nil {
 				tokenInvalid(w, r)
 				return
@@ -85,6 +94,24 @@ func Authenticator(ja *jwtauth.JWTAuth, ur user.Userright) func(http.Handler) ht
 				tokenInvalid(w, r)
 				return
 			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func PaymentMiddleware(ja *jwtauth.JWTAuth, tokenCost int) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, err := getUserFromToken(r)
+			if err != nil {
+				tokenInvalid(w, r)
+				return
+			}
+			if u.Coins < tokenCost {
+				apierror(w, r, "Not enough Coins", http.StatusPaymentRequired)
+				return
+			}
+			userdb.SetUserCoins(u.Username, u.Coins-tokenCost)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -104,10 +131,11 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 		if err != nil {
 			log.Fatalln("Error loading userdb:", err)
 		}
-		if cfg.Mode == config.UserCoins {
-			for _, u := range userdb.ListUsers() {
-				userdb.SetUserCoins(u.Username, 10)
-			}
+	}
+
+	if cfg.Mode == config.UserCoins {
+		for _, u := range userdb.ListUsers() {
+			userdb.SetUserCoins(u.Username, cfg.CoinConfig.InitialCoins)
 		}
 	}
 
@@ -128,7 +156,12 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 					r.Use(jwtauth.Verifier(tokenAuth))
 					r.Use(Authenticator(tokenAuth, user.Unprivileged))
 				}
-				r.Post("/", addtoQueueHandler)
+				r.Group(func(r chi.Router) {
+					if cfg.Mode == config.UserCoins {
+						r.Use(PaymentMiddleware(tokenAuth, cfg.CoinConfig.PerAddCoins))
+					}
+					r.Post("/", addtoQueueHandler)
+				})
 				r.Group(func(r chi.Router) {
 					if cfg.Mode > config.Voting {
 						r.Use(Authenticator(tokenAuth, user.Moderator))
@@ -137,7 +170,12 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 				})
 				r.Route("/{songid}", func(r chi.Router) {
 					if cfg.Mode > config.Simple {
-						r.Post("/vote", voteSongHandler)
+						r.Group(func(r chi.Router) {
+							if cfg.Mode == config.UserCoins {
+								r.Use(PaymentMiddleware(tokenAuth, cfg.CoinConfig.PerVoteCoins))
+							}
+							r.Post("/vote", voteSongHandler)
+						})
 					}
 					r.Group(func(r chi.Router) {
 						if cfg.Mode > config.Voting {

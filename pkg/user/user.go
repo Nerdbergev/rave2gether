@@ -174,6 +174,18 @@ func (udb *UserDB) SetUserCoins(username string, coins int) error {
 	return nil
 }
 
+func (udb *UserDB) AddUserCoins(username string, coins int) error {
+	if !udb.DoesUserExist(username) {
+		return errors.New("User does not exist")
+	}
+	udb.mutex.Lock()
+	u := udb.users[username]
+	u.AddCoins(coins)
+	udb.users[username] = u
+	udb.mutex.Unlock()
+	return nil
+}
+
 func (udb *UserDB) SaveToFile(filename string) error {
 	udb.mutex.Lock()
 	defer udb.mutex.Unlock()

@@ -75,12 +75,15 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
     return () => clearInterval(songInterval);
   }, []);
 
+  const { loadUserInfo } = useAuth();
+
   const handleAddSong = async () => {
     const song = prompt("Enter song name:");
     if (song) {
         try {
             await addToQueue(song);
             loadQueue();
+            loadUserInfo();
         }
         catch (error) {
             console.error("Failed to add song", error);
@@ -114,6 +117,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
     try {
       await upvoteSong(id);
       loadQueue();
+      loadUserInfo();
     } catch (error) {
         console.error("Failed to upvote song", error);
         setError("Failed to upvote song: " + error);
@@ -124,6 +128,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
     try {
       await downvoteSong(id);
       loadQueue();
+      loadUserInfo();
     } catch (error) {
         console.error("Failed to downvote song", error);
         setError("Failed to downvote song: " + error);

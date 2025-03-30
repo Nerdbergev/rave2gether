@@ -16,12 +16,21 @@ const (
 	UserCoins
 )
 
+type CoinConfig struct {
+	InitialCoins int
+	PerVoteCoins int
+	PerAddCoins  int
+	MaximumCoins int
+	RegenTime    int
+}
+
 type Config struct {
-	Port     int
-	FileDir  string
-	YTApiKey string
-	Mode     Operatingmode
-	Secret   string
+	Port       int
+	FileDir    string
+	YTApiKey   string
+	Mode       Operatingmode
+	Secret     string
+	CoinConfig CoinConfig
 }
 
 func LoadConfig(filepath string) (Config, error) {
