@@ -11,6 +11,7 @@ interface QueueItemProps {
   onDelete: (id: string) => void;
   onSkip: (id: string) => void;
   mode: Mode;
+  userIsModerator: boolean;
 }
 
 const formatTime = (nanoseconds: number): string => {
@@ -20,8 +21,9 @@ const formatTime = (nanoseconds: number): string => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownvote, onDelete, onSkip, mode }) => {
+const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownvote, onDelete, onSkip, mode, userIsModerator }) => {
   const modeIsVoting = mode !== Mode.Simple;
+  const canSkipAndDelete = mode === Mode.Simple || mode === Mode.Voting || userIsModerator;
 
   return (
     <div className="p-4 bg-gray-600 rounded-lg shadow-sm hover:bg-gray-500 transition-colors">
@@ -35,12 +37,14 @@ const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownv
             <p className="text-center text-sm text-gray-100">
                 {formatTime(song.position)} / {formatTime(song.length)}
             </p>
+            {canSkipAndDelete && (
             <button
                 onClick={() => onSkip(song.id)}
                 className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-1 rounded"
             >
                 Skip
             </button>
+            )}
             </div>
         )}
         {itemType == QueueItemType.QUEUE && (
@@ -67,13 +71,15 @@ const QueueItem: React.FC<QueueItemProps> = ({ song, itemType, onUpvote, onDownv
               </button>
               </>
             ) }
+            {canSkipAndDelete && (
             <button
                 onClick={() => onDelete(song.id)}
                 className="bg-gray-700 hover:bg-gray-600 text-white rounded px-2 py-1 transition-colors"
                 title="Delete"
             >
                 Delete
-            </button>
+            </button>)}
+
             </div>
             </div>
         )}      

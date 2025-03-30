@@ -20,7 +20,7 @@ export enum UserRight {
 
 export interface User {
     username: string;
-    rights: UserRight;
+    right: UserRight;
     coins: number;
 }
 

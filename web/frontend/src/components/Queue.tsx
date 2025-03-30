@@ -1,10 +1,11 @@
 // src/components/Queue.tsx
 import React, { useState, useEffect } from "react";
 import { fetchQueue, fetchDownloadQueue, addToQueue, skipSong, deleteSong, fetchCurrentSong, upvoteSong, downvoteSong } from "../services/queueService";
-import { Song } from "../types";
+import { Song, UserRight } from "../types";
 import QueueItem from "./QueueItem";
 import QueueItemType from "./QueueItemType";
 import { Mode } from "../types";
+import { useAuth } from "../contexts/AuthContext";
 
 interface QueueProps {
   mode: Mode;
@@ -15,6 +16,11 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
   const [downloadQueue, setDownloadQueue] = useState<Song[]>([]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  let userIsModerator = false
+  if (user) {
+    userIsModerator = (user.right === UserRight.ADMIN || user.right === UserRight.MODERATOR);
+  }
 
   // Function to load the queue from the backend
   const loadQueue = async () => {
@@ -162,6 +168,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
                     onDelete={() => {}}
                     onSkip={handleSkipSong}
                     mode = {mode}
+                    userIsModerator = {userIsModerator}
                 />
             </div>
         ) : (
@@ -186,6 +193,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
               onDelete={handleDeleteSong}
               onSkip={() => {}}
               mode = {mode}
+              userIsModerator = {userIsModerator}
             />
           ))
         )}
@@ -206,6 +214,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
               onDelete={() => {}}
               onSkip={() => {}}
               mode = {mode}
+              userIsModerator = {userIsModerator}
             />
           ))
         )}

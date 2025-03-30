@@ -1,17 +1,11 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode, FC } from 'react';
 import api from "../api";
+import { User } from '../types';
 
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
-}
-
-export interface User {
-  username: string;
-  role: string;
-  coins: number;
-  // add any additional properties that /api/self returns
 }
 
 interface AuthContextType {

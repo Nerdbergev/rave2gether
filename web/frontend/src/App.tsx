@@ -13,7 +13,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Adjust the endpoint as needed (for example, /api/config or /api/self)
     const response = api.get("/mode");
     response.then((response) => {
       setConfig(response.data);
