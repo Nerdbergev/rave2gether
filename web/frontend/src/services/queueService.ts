@@ -1,14 +1,9 @@
 // src/services/queueService.ts
 import api from "../api";
-import { Song } from "../types";
+import { QueueResponse, Song } from "../types";
 
-export const fetchQueue = async (): Promise<Song[]> => {
-  const response = await api.get("/queue");
-  return response.data;
-};
-
-export const fetchDownloadQueue = async (): Promise<Song[]> => {
-  const response = await api.get("/queue/download");
+export const fetchAllQueues = async (): Promise<QueueResponse> => {
+  const response = await api.get("/queue/all");
   return response.data;
 }
 

@@ -40,6 +40,8 @@ func main() {
 
 	api.GetAPIRouter(c, r)
 
+	go api.PrepareQueue()
+
 	go api.DownloadQueue()
 
 	go api.WorkQueue()

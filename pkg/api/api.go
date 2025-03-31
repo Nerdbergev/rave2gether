@@ -14,11 +14,31 @@ import (
 
 var playlist queue.PlayQueue
 var downloadlist queue.DownloadQueue
+var preparelist queue.PrepareQueue
 var tokenAuth *jwtauth.JWTAuth
 var userdb user.UserDB
 var idleSleep = 500
 
 const maxSleep = 5000
+
+func PrepareQueue() {
+	for {
+		if preparelist.GetEntryCount() == 0 {
+			time.Sleep(time.Millisecond * time.Duration(idleSleep))
+			if idleSleep < maxSleep {
+				idleSleep += 500
+			}
+			continue
+		}
+		e, err := preparelist.PrepareNext()
+		if err != nil {
+			log.Printf("Error preparing Song: %v ID: %v Error: %v", e.Name, e.ID, err)
+		} else {
+			downloadlist.Entries = append(downloadlist.Entries, e)
+		}
+		idleSleep = 500
+	}
+}
 
 func DownloadQueue() {
 	for {
@@ -120,7 +140,7 @@ func PaymentMiddleware(ja *jwtauth.JWTAuth, tokenCost int) func(http.Handler) ht
 func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 	playlist.Queue.MusicDir = cfg.FileDir
 	downloadlist.Queue.MusicDir = cfg.FileDir
-	downloadlist.APIKey = cfg.YTApiKey
+	preparelist.APIKey = cfg.YTApiKey
 
 	if cfg.Mode > config.Voting {
 		tokenAuth = jwtauth.New("HS256", []byte(cfg.Secret), nil)
@@ -158,8 +178,10 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 			r.Post("/refreshtoken", apiRefreshTokenHandler)
 		}
 		r.Route("/queue", func(r chi.Router) {
-			r.Get("/", listQueueHandler)
+			r.Get("/play", listQueueHandler)
 			r.Get("/download", listDownloadQueueHandler)
+			r.Get("/prepare", listPrepareQueueHandler)
+			r.Get("/all", listAllQueuesHandler)
 			r.Get("/current", getCurrentSongHandler)
 			r.Group(func(r chi.Router) {
 				if cfg.Mode > config.Voting {

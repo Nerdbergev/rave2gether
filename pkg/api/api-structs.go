@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Nerdbergev/rave2gether/pkg/config"
+	"github.com/Nerdbergev/rave2gether/pkg/queue"
 )
 
 type errorResponse struct {
@@ -54,4 +55,10 @@ type refreshRequest struct {
 
 type modeResponse struct {
 	Mode config.Operatingmode `json:"mode"`
+}
+
+type allQueuesResponse struct {
+	PrepareQueue  []queue.Entry `json:"preparequeue"`
+	DownloadQueue []queue.Entry `json:"downloadqueue"`
+	PlayQueue     []queue.Entry `json:"playqueue"`
 }

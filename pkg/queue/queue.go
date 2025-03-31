@@ -60,8 +60,12 @@ type Queue struct {
 	SongInfo   SongInfo
 }
 
-type DownloadQueue struct {
+type PrepareQueue struct {
 	APIKey string
+	Queue
+}
+
+type DownloadQueue struct {
 	Queue
 }
 
@@ -172,50 +176,6 @@ func searchYouTube(query string, maxResults int, apiKey string) ([]map[string]st
 	}
 
 	return results, nil
-}
-
-func (q *DownloadQueue) AddEntry(input string, user user.User) error {
-	var e Entry
-	e.votedFor = make(map[string]int)
-	e.AddedBy = user.Username
-	e.AddedAt = time.Now()
-	if isValidUrl(input) {
-		e.URL = input
-		cmd := exec.Command("yt-dlp", "--print", "title", input)
-
-		// Capture the output
-		var out bytes.Buffer
-		cmd.Stdout = &out
-		err := cmd.Run()
-		if err != nil {
-			fmt.Printf("Error running yt-dlp: %v\n", err)
-			return errors.New("Error running yt-dlp: " + err.Error())
-		}
-		e.Name = strings.TrimSpace(string(out.String()))
-	} else {
-		result, err := searchYouTube(input, 1, q.APIKey)
-		if err != nil {
-			log.Println("Error searching for song: " + err.Error())
-			return errors.New("Error searching for song: " + err.Error())
-		}
-
-		if len(result) == 0 {
-			return errors.New("no results found")
-		}
-
-		e.Name = html.UnescapeString(result[0]["title"])
-		e.URL = result[0]["url"]
-	}
-	log.Println("Adding song to queue: " + e.Name + " (" + e.URL + ")")
-	h := sha1.New()
-	h.Write([]byte(e.URL))
-	e.Hash = hex.EncodeToString(h.Sum(nil))
-	e.ID = uuid.New().String()
-	log.Println(e)
-	q.EntryMutex.Lock()
-	q.Entries = append(q.Entries, e)
-	q.EntryMutex.Unlock()
-	return nil
 }
 
 func (q *Queue) PopEntry() Entry {
@@ -361,6 +321,12 @@ func (q *Queue) DeleteSong(id string) error {
 	return errors.New("song not found")
 }
 
+func (q *Queue) EmptySongInfo() {
+	q.SongInfo.Mutex.Lock()
+	q.SongInfo.Entry = Entry{}
+	q.SongInfo.Mutex.Unlock()
+}
+
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -370,7 +336,7 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-func (q *Queue) DownloadNext() (Entry, error) {
+func (q *DownloadQueue) DownloadNext() (Entry, error) {
 	if len(q.Entries) == 0 {
 		return Entry{}, nil
 	}
@@ -390,15 +356,84 @@ func (q *Queue) DownloadNext() (Entry, error) {
 		log.Println("Downloading to " + fp)
 		err := downloader.Download(e.URL, e.Hash, q.MusicDir)
 		if err != nil {
+			q.EmptySongInfo()
 			return e, errors.New("Error downloading file: " + err.Error())
 		}
 	} else {
 		log.Println("File already exists")
 	}
 
-	q.SongInfo.Mutex.Lock()
-	q.SongInfo.Entry = Entry{}
-	q.SongInfo.Mutex.Unlock()
+	q.EmptySongInfo()
 
 	return e, nil
+}
+
+func (q *PrepareQueue) AddEntry(input string, user user.User) error {
+	var e Entry
+	e.votedFor = make(map[string]int)
+	e.AddedBy = user.Username
+	e.AddedAt = time.Now()
+	e.Points = 0
+	e.Name = input
+	e.ID = uuid.New().String()
+	log.Println("Adding song to prepare queue: " + e.Name)
+	q.EntryMutex.Lock()
+	q.Entries = append(q.Entries, e)
+	q.EntryMutex.Unlock()
+	return nil
+}
+
+func (q *PrepareQueue) PrepareNext() (Entry, error) {
+	if len(q.Entries) == 0 {
+		return Entry{}, nil
+	}
+
+	log.Println("Trying to prepare next Song")
+
+	e := q.PopEntry()
+
+	q.SongInfo.Mutex.Lock()
+	q.SongInfo.Entry = e
+	q.SongInfo.Mutex.Unlock()
+
+	log.Println("Preparing next Song " + e.Name)
+	input := e.Name
+	if isValidUrl(input) {
+		e.URL = input
+		cmd := exec.Command("yt-dlp", "--print", "title", input)
+
+		// Capture the output
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		err := cmd.Run()
+		if err != nil {
+			fmt.Printf("Error running yt-dlp: %v\n", err)
+			q.EmptySongInfo()
+			return Entry{}, errors.New("Error running yt-dlp: " + err.Error())
+		}
+		e.Name = strings.TrimSpace(string(out.String()))
+	} else {
+		result, err := searchYouTube(input, 1, q.APIKey)
+		if err != nil {
+			log.Println("Error searching for song: " + err.Error())
+			q.EmptySongInfo()
+			return Entry{}, errors.New("Error searching for song: " + err.Error())
+		}
+
+		if len(result) == 0 {
+			q.EmptySongInfo()
+			return Entry{}, errors.New("no results found")
+		}
+
+		e.Name = html.UnescapeString(result[0]["title"])
+		e.URL = result[0]["url"]
+	}
+	log.Println("Sing prepared: " + e.Name + " (" + e.URL + ")")
+	h := sha1.New()
+	h.Write([]byte(e.URL))
+	e.Hash = hex.EncodeToString(h.Sum(nil))
+	q.EmptySongInfo()
+
+	return e, nil
+
 }

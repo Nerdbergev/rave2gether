@@ -1,7 +1,7 @@
 // src/components/Queue.tsx
 import React, { useState, useEffect } from "react";
-import { fetchQueue, fetchDownloadQueue, addToQueue, skipSong, deleteSong, fetchCurrentSong, upvoteSong, downvoteSong } from "../services/queueService";
-import { Song, UserRight } from "../types";
+import { fetchAllQueues, addToQueue, skipSong, deleteSong, fetchCurrentSong, upvoteSong, downvoteSong } from "../services/queueService";
+import { QueueResponse, Song, UserRight } from "../types";
 import QueueItem from "./QueueItem";
 import QueueItemType from "./QueueItemType";
 import { Mode } from "../types";
@@ -12,8 +12,7 @@ interface QueueProps {
 }
 
 const Queue: React.FC<QueueProps> = ({mode}) => {
-  const [queue, setQueue] = useState<Song[]>([]);
-  const [downloadQueue, setDownloadQueue] = useState<Song[]>([]);
+  const [queues, setQueues] = useState<QueueResponse| null>(null);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -23,28 +22,17 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
   }
 
   // Function to load the queue from the backend
-  const loadQueue = async () => {
+  const loadQueues = async () => {
     try {
-      const data = await fetchQueue();
+      const data = await fetchAllQueues();
       // If the API returns null, default to an empty array.
-      setQueue(data || []);
+      setQueues(data || null);
     } catch (error) {
       console.error("Failed to load queue", error);
       setError("Failed to load queue: " + error); // Set an error message
-      setQueue([]); // Reset to empty array on error.
+      setQueues(null); // Reset to empty array on error.
     }
   };
-
-  const loadDownloadQueue = async () => {
-    try {
-      const data = await fetchDownloadQueue();
-      setDownloadQueue(data || []);
-    } catch (error) {
-      console.error("Failed to load download queue", error);
-      setError("Failed to load download queue: " + error);
-      setDownloadQueue([]);
-    }
-  }
 
   const loadCurrentSong = async () => {
     try {
@@ -58,11 +46,9 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
 };
 
   useEffect(() => {
-    loadQueue(); // Initial load
-    loadDownloadQueue();
+    loadQueues(); // Initial load
     const intervalId = setInterval(() => {
-      loadQueue();
-      loadDownloadQueue();
+      loadQueues();
     }, 5000);
     return () => clearInterval(intervalId);
   }, []);
@@ -82,7 +68,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
     if (song) {
         try {
             await addToQueue(song);
-            loadQueue();
+            loadQueues();
             loadUserInfo();
         }
         catch (error) {
@@ -95,7 +81,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
   const handleSkipSong = async () => {
     try {
       await skipSong();
-      loadQueue();
+      loadQueues();
     } catch (error) {
         console.error("Failed to skip song", error);
         setError("Failed to skip song: " + error);
@@ -105,7 +91,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
   const handleDeleteSong = async (songId: string) => {
     try {
       await deleteSong(songId);
-      loadQueue();
+      loadQueues();
     } catch (error) {
         console.error("Failed to delete song", error);
         setError("Failed to delete song: " + error);
@@ -116,7 +102,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
   const handleUpvote = async (id: string) => {
     try {
       await upvoteSong(id);
-      loadQueue();
+      loadQueues();
       loadUserInfo();
     } catch (error) {
         console.error("Failed to upvote song", error);
@@ -127,7 +113,7 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
   const handleDownvote = async (id: string) => {
     try {
       await downvoteSong(id);
-      loadQueue();
+      loadQueues();
       loadUserInfo();
     } catch (error) {
         console.error("Failed to downvote song", error);
@@ -185,10 +171,10 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
       {/* List container with a minimum height to avoid layout collapse */}
       <h3 className="text-l font-bold text-white mb-4">Play Queue</h3>
       <ul className="mt-4 space-y-2 min-h-[50px]">
-        {queue.length === 0 ? (
+        {queues?.playqueue.length === 0 ? (
           <li className="text-center text-gray-400">Queue is empty.</li>
         ) : (
-          queue.map((song) => (
+          queues?.playqueue.map((song) => (
             <QueueItem
               key={song.id}
               song={song}
@@ -206,14 +192,35 @@ const Queue: React.FC<QueueProps> = ({mode}) => {
 
       <h3 className="text-l font-bold text-white mb-4">Download Queue</h3>
       <ul className="mt-4 space-y-2 min-h-[50px]">
-        {downloadQueue.length === 0 ? (
+        {queues?.downloadqueue.length === 0 ? (
           <li className="text-center text-gray-400">Queue is empty.</li>
         ) : (
-            downloadQueue.map((song) => (
+            queues?.downloadqueue.map((song) => (
             <QueueItem
               key={song.id}
               song={song}
               itemType={QueueItemType.DOWNLOAD}
+              onUpvote={() => {}}
+              onDownvote={() => {}}
+              onDelete={() => {}}
+              onSkip={() => {}}
+              mode = {mode}
+              userIsModerator = {userIsModerator}
+            />
+          ))
+        )}
+      </ul>
+
+      <h3 className="text-l font-bold text-white mb-4">Prepare Queue</h3>
+      <ul className="mt-4 space-y-2 min-h-[50px]">
+        {queues?.preparequeue.length === 0 ? (
+          <li className="text-center text-gray-400">Queue is empty.</li>
+        ) : (
+            queues?.preparequeue.map((song) => (
+            <QueueItem
+              key={song.id}
+              song={song}
+              itemType={QueueItemType.PREPARE}
               onUpvote={() => {}}
               onDownvote={() => {}}
               onDelete={() => {}}

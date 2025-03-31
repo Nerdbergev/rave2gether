@@ -57,7 +57,7 @@ func addtoQueueHandler(w http.ResponseWriter, r *http.Request) {
 		if q == "" {
 			continue
 		}
-		err = downloadlist.AddEntry(q, u)
+		err = preparelist.AddEntry(q, u)
 		if err != nil {
 			apierror(w, r, "Error adding song to queue: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -66,9 +66,20 @@ func addtoQueueHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func listQueueItems(q *queue.Queue) []queue.Entry {
+	ee := []queue.Entry{}
+	downloadlist.SongInfo.Mutex.Lock()
+	e := downloadlist.SongInfo.Entry
+	downloadlist.SongInfo.Mutex.Unlock()
+	if e.ID != "" {
+		ee = append(ee, e)
+	}
+	ee = append(ee, q.Entries...)
+	return ee
+}
+
 func listQueueHandler(w http.ResponseWriter, r *http.Request) {
-	var ee []queue.Entry
-	ee = append(ee, playlist.Entries...)
+	ee := listQueueItems(&playlist.Queue)
 	j, err := json.MarshalIndent(ee, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
@@ -78,17 +89,33 @@ func listQueueHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func listDownloadQueueHandler(w http.ResponseWriter, r *http.Request) {
-	var ee []queue.Entry
-	downloadlist.SongInfo.Mutex.Lock()
-	e := downloadlist.SongInfo.Entry
-	downloadlist.SongInfo.Mutex.Unlock()
-	if e.URL != "" {
-		ee = append(ee, e)
-	}
-	ee = append(ee, downloadlist.Entries...)
+	ee := listQueueItems(&downloadlist.Queue)
 	j, err := json.MarshalIndent(ee, "", "    ")
 	if err != nil {
 		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
+func listPrepareQueueHandler(w http.ResponseWriter, r *http.Request) {
+	ee := listQueueItems(&preparelist.Queue)
+	j, err := json.MarshalIndent(ee, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling queue: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
+
+func listAllQueuesHandler(w http.ResponseWriter, r *http.Request) {
+	var apr allQueuesResponse
+	apr.PrepareQueue = listQueueItems(&preparelist.Queue)
+	apr.DownloadQueue = listQueueItems(&downloadlist.Queue)
+	apr.PlayQueue = listQueueItems(&playlist.Queue)
+	j, err := json.MarshalIndent(apr, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling queues: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Write(j)

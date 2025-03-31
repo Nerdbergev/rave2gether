@@ -11,7 +11,13 @@ export interface Song {
     position:  number
     length:     number   
   }
-  
+
+export interface QueueResponse {
+    preparequeue: Song[];
+    downloadqueue: Song[];
+    playqueue: Song[];
+}
+
 export enum UserRight {
     USER,
     MODERATOR,

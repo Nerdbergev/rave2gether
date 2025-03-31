@@ -1,7 +1,8 @@
 enum QueueItemType {
     PLAY,
     QUEUE,
-    DOWNLOAD
+    DOWNLOAD,
+    PREPARE
   }
 
 export default QueueItemType;
