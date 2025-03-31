@@ -27,6 +27,7 @@ type User struct {
 	Password string    `json:"-"`
 	Right    Userright `json:"right"`
 	Coins    int       `json:"coins"`
+	Active   bool      `json:"active"`
 }
 
 type UserDB struct {
@@ -92,6 +93,10 @@ func (u *User) IsModerator() bool {
 
 func (u *User) IsAdmin() bool {
 	return u.GetRight() >= Admin
+}
+
+func (u *User) IsActive() bool {
+	return u.Active
 }
 
 func (udb *UserDB) DoesUserExist(username string) bool {
@@ -196,7 +201,7 @@ func (udb *UserDB) SaveToFile(filename string) error {
 	defer f.Close()
 
 	for _, user := range udb.users {
-		line := fmt.Sprintf("%s:%s:%s\n", user.Username, user.Password, strconv.Itoa(int(user.Right)))
+		line := fmt.Sprintf("%s:%s:%s:%s\n", user.Username, user.Password, strconv.Itoa(int(user.Right)), strconv.FormatBool(user.Active))
 		_, err := f.WriteString(line)
 		if err != nil {
 			return errors.New("Error writing to file: " + err.Error())
@@ -224,8 +229,8 @@ func (udb *UserDB) LoadFromFile(filename string) error {
 	for scanner.Scan() {
 		line++
 		parts := strings.Split(scanner.Text(), ":")
-		if len(parts) != 3 {
-			return errors.New("Wrong user:pass:right format in line " + strconv.Itoa(line))
+		if len(parts) != 4 {
+			return errors.New("Wrong user:pass:right:active format in line " + strconv.Itoa(line))
 		}
 		username = parts[0]
 		password = parts[1]
@@ -233,7 +238,11 @@ func (udb *UserDB) LoadFromFile(filename string) error {
 		if err != nil {
 			return errors.New("Error parsing right in line " + strconv.Itoa(line) + ": " + err.Error())
 		}
-		u := User{Username: username, Password: password, Right: Userright(right)}
+		active, err := strconv.ParseBool(parts[3])
+		if err != nil {
+			return errors.New("Error parsing active in line " + strconv.Itoa(line) + ": " + err.Error())
+		}
+		u := User{Username: username, Password: password, Right: Userright(right), Active: active}
 		udb.users[username] = u
 	}
 

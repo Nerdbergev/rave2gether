@@ -99,6 +99,10 @@ func getUserFromToken(r *http.Request) (user.User, error) {
 		log.Println("Error getting user from userdb:", err)
 		return user.User{}, err
 	}
+	if !u.Active {
+		log.Println("Error user is not active")
+		return user.User{}, err
+	}
 	return u, nil
 }
 

@@ -24,6 +24,11 @@ type CoinConfig struct {
 	RegenTime    int
 }
 
+type UserConfig struct {
+	AllowUserRegistration  bool
+	ActivateUsersByDefault bool
+}
+
 type Config struct {
 	Port       int
 	FileDir    string
@@ -31,6 +36,7 @@ type Config struct {
 	Mode       Operatingmode
 	Secret     string
 	CoinConfig CoinConfig
+	UserConfig UserConfig
 }
 
 func LoadConfig(filepath string) (Config, error) {
@@ -46,4 +52,18 @@ func LoadConfig(filepath string) (Config, error) {
 		return res, errors.New("Error decoding file: " + err.Error())
 	}
 	return res, nil
+}
+
+func (c *Config) SaveConfig(filepath string) error {
+	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return errors.New("Error opening file: " + err.Error())
+	}
+	defer file.Close()
+	encoder := toml.NewEncoder(file)
+	err = encoder.Encode(c)
+	if err != nil {
+		return errors.New("Error encoding file: " + err.Error())
+	}
+	return nil
 }
