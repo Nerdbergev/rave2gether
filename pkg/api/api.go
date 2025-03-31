@@ -206,13 +206,13 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 			r.Route("/users", func(r chi.Router) {
 				r.Use(jwtauth.Verifier(tokenAuth))
 				r.Use(Authenticator(tokenAuth, user.Unprivileged))
-				r.Get("/", getUsersHandler)
 				r.Post("/{username}/password", changePasswordHandler)
-				r.Get("/{username}/coins", getCoinsHandler)
 				r.Group(func(r chi.Router) {
 					r.Use(Authenticator(tokenAuth, user.Moderator))
 					r.Post("/{username}/coins", setCoinsHandler)
 					r.Post("/{username}/addcoins", addCoinsHandler)
+					r.Get("/{username}/coins", getCoinsHandler)
+					r.Get("/", getUsersHandler)
 				})
 				r.Group(func(r chi.Router) {
 					r.Use(Authenticator(tokenAuth, user.Admin))
