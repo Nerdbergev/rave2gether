@@ -137,6 +137,16 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 		for _, u := range userdb.ListUsers() {
 			userdb.SetUserCoins(u.Username, cfg.CoinConfig.InitialCoins)
 		}
+		ticker := time.NewTicker(time.Duration(cfg.CoinConfig.RegenTime) * time.Second)
+		go func() {
+			for range ticker.C {
+				for _, u := range userdb.ListUsers() {
+					if u.Coins < cfg.CoinConfig.MaximumCoins {
+						userdb.SetUserCoins(u.Username, u.Coins+1)
+					}
+				}
+			}
+		}()
 	}
 
 	r.Route("/api", func(r chi.Router) {
