@@ -39,6 +39,7 @@ type addUserRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Right    int    `json:"right"`
+	Active   bool   `json:"active"`
 }
 
 type passwordChangeRequest struct {

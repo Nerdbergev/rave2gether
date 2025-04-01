@@ -116,11 +116,11 @@ func (udb *UserDB) GetUser(username string) (User, error) {
 	return u, nil
 }
 
-func (udb *UserDB) AddUser(username string, password string, right Userright) error {
+func (udb *UserDB) AddUser(username string, password string, right Userright, active bool) error {
 	if udb.DoesUserExist(username) {
 		return errors.New("User already exists")
 	}
-	u := User{Username: username, Right: right}
+	u := User{Username: username, Right: right, Active: active}
 	err := u.SetPassword(password)
 	if err != nil {
 		return errors.New("Error setting password: " + err.Error())
@@ -141,7 +141,7 @@ func (udb *UserDB) RemoveUser(username string) error {
 	return nil
 }
 
-func (udb *UserDB) UpdateUser(username string, password string, right Userright) error {
+func (udb *UserDB) UpdateUser(username string, password string, right Userright, active bool) error {
 	if !udb.DoesUserExist(username) {
 		return errors.New("User does not exist")
 	}
@@ -151,6 +151,7 @@ func (udb *UserDB) UpdateUser(username string, password string, right Userright)
 		return errors.New("Error setting password: " + err.Error())
 	}
 	u.SetRight(right)
+	u.Active = active
 	udb.mutex.Lock()
 	udb.users[username] = u
 	udb.mutex.Unlock()

@@ -328,7 +328,7 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) {
 		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	err = userdb.AddUser(req.Username, req.Password, user.Userright(req.Right))
+	err = userdb.AddUser(req.Username, req.Password, user.Userright(req.Right), req.Active)
 	if err != nil {
 		apierror(w, r, "Error adding user: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -404,7 +404,7 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	err = userdb.UpdateUser(u, req.Password, user.Userright(req.Right))
+	err = userdb.UpdateUser(u, req.Password, user.Userright(req.Right), req.Active)
 	if err != nil {
 		apierror(w, r, "Error updating user: "+err.Error(), http.StatusInternalServerError)
 		return
