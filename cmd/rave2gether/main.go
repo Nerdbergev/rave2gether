@@ -11,10 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/spf13/pflag"
 )
 
 func main() {
-	c, err := config.LoadConfig("/home/philmacfly/Coding/go/src/github.com/Nerdbergev/rave2gether/config.toml")
+	configPath := pflag.String("config", "config.toml", "config path")
+	c, err := config.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatal("Error loading config:", err)
 	}
