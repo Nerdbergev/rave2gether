@@ -3,7 +3,7 @@ import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import { logout, refreshToken } from "./services/authService";
 
-const API_URL = "http://localhost:8081/api";
+const API_URL = "/api";
 
 const getToken = (): string | null => localStorage.getItem("token");
 
