@@ -151,7 +151,7 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 	}
 
 	if cfg.Mode > config.Voting {
-		err := userdb.LoadFromFile(cfg.FileDir + "/users.txt")
+		err := userdb.LoadFromFile(cfg.UserConfig.UserConfigDir + "/users.txt")
 		if err != nil {
 			log.Fatalln("Error loading userdb:", err)
 		}
@@ -246,6 +246,7 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 					r.Route("/{username}", func(r chi.Router) {
 						r.Delete("/", deleteUserHandler)
 						r.Put("/", updateUserHandler)
+
 					})
 				})
 			})

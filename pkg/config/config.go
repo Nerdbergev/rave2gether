@@ -25,6 +25,7 @@ type CoinConfig struct {
 }
 
 type UserConfig struct {
+	UserConfigDir          string
 	AllowUserRegistration  bool
 	ActivateUsersByDefault bool
 }
@@ -40,7 +41,24 @@ type Config struct {
 }
 
 func LoadConfig(filepath string) (Config, error) {
-	var res Config
+
+	res := Config{
+		Port:    8081,
+		FileDir: "/tmp/rave2gether/music",
+		Mode:    Simple,
+		CoinConfig: CoinConfig{
+			InitialCoins: 10,
+			PerVoteCoins: 1,
+			PerAddCoins:  2,
+			MaximumCoins: 100,
+			RegenTime:    60,
+		},
+		UserConfig: UserConfig{
+			UserConfigDir:          "/tmp/rave2gether/users",
+			AllowUserRegistration:  true,
+			ActivateUsersByDefault: true,
+		},
+	}
 	file, err := os.Open(filepath)
 	if err != nil {
 		return res, errors.New("Error opening file: " + err.Error())
@@ -50,6 +68,9 @@ func LoadConfig(filepath string) (Config, error) {
 	err = decoder.Decode(&res)
 	if err != nil {
 		return res, errors.New("Error decoding file: " + err.Error())
+	}
+	if res.Secret == "" {
+		return res, errors.New("secret is empty")
 	}
 	return res, nil
 }
