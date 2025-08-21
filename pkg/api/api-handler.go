@@ -481,7 +481,7 @@ func apiModeHandler(w http.ResponseWriter, r *http.Request, mode config.Operatin
 	w.Write(j)
 }
 
-func apiRegisterHandler(w http.ResponseWriter, r *http.Request) {
+func apiRegisterHandler(w http.ResponseWriter, r *http.Request, userAutoActive bool) {
 	var req registerRequest
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&req)
@@ -493,7 +493,7 @@ func apiRegisterHandler(w http.ResponseWriter, r *http.Request) {
 		apierror(w, r, "User already exists", http.StatusBadRequest)
 		return
 	}
-	err = userdb.AddUser(req.Username, req.Password, user.Userright(0), true)
+	err = userdb.AddUser(req.Username, req.Password, user.Userright(0), userAutoActive)
 	if err != nil {
 		apierror(w, r, "Error adding user: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -180,7 +180,9 @@ func GetAPIRouter(cfg config.Config, r *chi.Mux) {
 		if cfg.Mode > config.Voting {
 			r.Post("/token", apiGetTokenHandler)
 			r.Post("/refreshtoken", apiRefreshTokenHandler)
-			r.Post("/register", apiRegisterHandler)
+			r.Post("/register", func(w http.ResponseWriter, r *http.Request) {
+				apiRegisterHandler(w, r, cfg.UserConfig.ActivateUsersByDefault)
+			})
 		}
 		r.Route("/queue", func(r chi.Router) {
 			r.Get("/play", listQueueHandler)
