@@ -63,3 +63,8 @@ type allQueuesResponse struct {
 	DownloadQueue []queue.Entry `json:"downloadqueue"`
 	PlayQueue     []queue.Entry `json:"playqueue"`
 }
+
+type registerRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}

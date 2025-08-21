@@ -480,3 +480,33 @@ func apiModeHandler(w http.ResponseWriter, r *http.Request, mode config.Operatin
 	}
 	w.Write(j)
 }
+
+func apiRegisterHandler(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		apierror(w, r, "Error decoding request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !userdb.DoesUserExist(req.Username) {
+		apierror(w, r, "User already exists", http.StatusBadRequest)
+		return
+	}
+	err = userdb.AddUser(req.Username, req.Password, user.Userright(0), true)
+	if err != nil {
+		apierror(w, r, "Error adding user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tokenString, refreshTokenString, err := getTokens(req.Username)
+	if err != nil {
+		apierror(w, r, "Error getting tokens: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	j, err := json.MarshalIndent(authResponse{tokenString, refreshTokenString}, "", "    ")
+	if err != nil {
+		apierror(w, r, "Error marshalling token: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(j)
+}
